@@ -1,54 +1,86 @@
 # MARC-A-BOT Backend
 
-Backend API đơn giản sử dụng Flask cho ứng dụng MARC-A-BOT.
+Backend API cho MARC-A-BOT - Hệ thống AI tự động tạo MARC21 records.
 
-## Cài đặt
+## 🚀 Quick Start
 
-1. Tạo môi trường ảo (virtual environment):
 ```bash
-python -m venv venv
-```
-
-2. Kích hoạt môi trường ảo:
-- Windows:
-```bash
-venv\Scripts\activate
-```
-- Linux/Mac:
-```bash
-source venv/bin/activate
-```
-
-3. Cài đặt dependencies:
-```bash
+# Install
 pip install -r requirements.txt
-```
 
-4. Tạo file `.env` từ `.env.example`:
-```bash
-copy .env.example .env
-```
-
-## Chạy ứng dụng
-
-```bash
+# Run
 python app.py
+# → http://localhost:5000
 ```
 
-Server sẽ chạy tại: http://localhost:5000
-
-## API Endpoints
-
-- `GET /` - Trang chủ
-- `GET /api/health` - Kiểm tra trạng thái server
-- `POST /api/process` - Xử lý dữ liệu
-
-## Cấu trúc thư mục
+## 📁 Structure
 
 ```
 backend/
-├── app.py              # File chính của ứng dụng Flask
-├── requirements.txt    # Dependencies
-├── .env.example       # File cấu hình mẫu
-└── README.md          # Tài liệu
+├── app.py              # Entry point
+├── api/                # REST endpoints
+├── services/           # Business logic
+│   └── authority/     # Authority Control Service
+├── tests/             # Tests
+└── scripts/           # Utilities
 ```
+
+## 🎓 Authority Control Service
+
+**Chức năng**: Chuẩn hóa keywords → MARC21 fields
+
+- **Sources**: MESH, LCSH, LCC, NLM
+- **Cache**: SQLite + fuzzy matching (80% threshold)
+- **Output**: MARC 650, 050, 060 fields
+
+## 📡 API Endpoints
+
+Base: `http://localhost:5000/api/authority`
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/health` | GET | Health check |
+| `/search` | POST | Search authority terms |
+| `/map` | POST | Map keywords |
+| `/generate-marc` | POST | Generate MARC fields |
+| `/validate` | POST | Validate MARC field |
+| `/cache/stats` | GET | Cache statistics |
+| `/tools` | GET | List agent tools |
+
+## 🧪 Testing
+
+```bash
+# Quick test
+python test_authority_quick.py
+
+# Full suite
+python scripts/run_full_tests.py
+
+# API tests (server must be running)
+python scripts/test_endpoints.py
+```
+
+## ⚙️ Configuration
+
+Edit `services/authority/config.py`:
+
+```python
+MESH_API_URL = "https://meshb.nlm.nih.gov/api"
+FUZZY_MATCH_THRESHOLD = 80
+CACHE_TTL_DAYS = 30
+```
+
+## 📚 Documentation
+
+- `docs/ARCHITECTURE.md` - System architecture
+- `CONTRIBUTING.md` - Development guide
+
+## 🔧 Troubleshooting
+
+**PyZ3950 warning**: Optional dependency, system works without it.
+
+**Import errors**: Run from `backend/` directory with activated venv.
+
+## 📝 License
+
+MIT

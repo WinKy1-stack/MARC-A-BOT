@@ -1,0 +1,3 @@
+"""
+Authority tests package initialization
+"""

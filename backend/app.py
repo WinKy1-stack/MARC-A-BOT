@@ -1,8 +1,21 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+import logging
+
+# Import authority routes
+from api.authority_routes import authority_bp
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 
 app = Flask(__name__)
 CORS(app)
+
+# Register blueprints
+app.register_blueprint(authority_bp)
 
 @app.route('/')
 def home():
