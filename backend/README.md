@@ -1,54 +1,72 @@
-# MARC-A-BOT Backend
+# MARC-A-BOT Backend - OCR Service
 
-Backend API đơn giản sử dụng Flask cho ứng dụng MARC-A-BOT.
+Backend API cho hệ thống OCR sách sử dụng PaddleOCR-VL để trích xuất metadata phục vụ cataloging MARC21.
 
-## Cài đặt
+##  Tính năng chính
 
-1. Tạo môi trường ảo (virtual environment):
-```bash
-python -m venv venv
-```
+- **OCR chính xác cao** với PaddleOCR-VL
+- **Xử lý batch** với ThreadPoolExecutor
+- **Queue management** tự động khi quá tải
+- **GPU acceleration** với CUDA
+- **Auto-unload model** khi idle để tiết kiệm memory
+- **Metrics & Monitoring** với logging chi tiết
+- **RESTful API** với Flask
 
-2. Kích hoạt môi trường ảo:
-- Windows:
-```bash
-venv\Scripts\activate
-```
-- Linux/Mac:
-```bash
-source venv/bin/activate
-```
+##  Yêu cầu hệ thống
 
-3. Cài đặt dependencies:
-```bash
+- Python 3.11.9+
+- CUDA 11.8+ (cho GPU)
+- 8GB RAM (16GB khuyến nghị)
+- 4GB VRAM (cho GPU)
+
+##  Quick Start
+
+\\\ash
+cd MARC-A-BOT/backend
+
+python -m venv .venv
+.venv\\Scripts\\Activate.ps1
+
 pip install -r requirements.txt
-```
 
-4. Tạo file `.env` từ `.env.example`:
-```bash
-copy .env.example .env
-```
-
-## Chạy ứng dụng
-
-```bash
 python app.py
-```
+\\\`n
+Server sẽ chạy tại http://localhost:5001
 
-Server sẽ chạy tại: http://localhost:5000
+##  Documentation
 
-## API Endpoints
+Chi tiết đầy đủ xem trong thư mục **docs/**:
 
-- `GET /` - Trang chủ
-- `GET /api/health` - Kiểm tra trạng thái server
-- `POST /api/process` - Xử lý dữ liệu
+- [API Documentation](docs/API.md)
+- [Installation Guide](docs/INSTALLATION.md)
+- [Configuration](docs/CONFIGURATION.md)
+- [Development Guide](docs/DEVELOPMENT.md)
+- [Testing](docs/TESTING.md)
+- [Performance Tuning](docs/PERFORMANCE.md)
 
-## Cấu trúc thư mục
+##  Ví dụ API
 
-```
+\\\ash
+curl -X POST http://localhost:5001/api/ocr -F 'file=@book.jpg'
+\\\`n
+##  Kiến trúc
+
+\\\	ext
 backend/
-├── app.py              # File chính của ứng dụng Flask
-├── requirements.txt    # Dependencies
-├── .env.example       # File cấu hình mẫu
-└── README.md          # Tài liệu
-```
+ app/
+    config.py
+    routes/
+    services/
+    ultis/
+    test/
+ docs/
+ app.py
+\\\`n
+##  Testing
+
+\\\ash
+pytest app/test/
+\\\`n
+##  License
+
+MIT License
