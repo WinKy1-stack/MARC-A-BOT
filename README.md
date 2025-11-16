@@ -1,142 +1,122 @@
 # MARC-A-BOT
 
-OCR metadata extraction và authority control system cho thư viện số - Tự động trích xuất metadata từ ảnh tài liệu và chuẩn hóa theo MARC21.
+Hệ thống OCR metadata extraction và authority control cho thư viện số - Tự động trích xuất metadata từ ảnh và chuẩn hóa theo MARC21.
 
-## 🎯 Tính năng chính
+## 🎯 Tính năng
 
-- **OCR Extraction**: 5 agents tự động trích xuất metadata (title, authors, ISBN, keywords, document type)
-- **Authority Control**: Kết nối MESH, LCSH, LCC, NLM để chuẩn hóa từ khóa
-- **MARC21 Generation**: Tạo bản ghi MARC21 đầy đủ từ OCR text
-- **Image Processing**: Upload và xử lý ảnh với giao diện hiện đại
-- **RESTful API**: 8 endpoints cho authority control và metadata extraction
+- **5 OCR Agents**: Title, Author, ISBN/Year, Keywords, Document Type
+- **Authority Control**: MESH, LCSH, LCC, NLM integration với cache
+- **6 AI Tools**: Compatible với CrewAI, LangGraph, LangChain, Gemini
+- **MARC21 Standard**: Complete bibliographic records
+- **RESTful API**: 8 endpoints
+- **Modern UI**: React + TypeScript + TailwindCSS
 
-## 🏗️ Kiến trúc
+## 🏗️ Tech Stack
 
-### Frontend
-- **React 18 + TypeScript** - UI hiện đại với type safety
-- **Vite** - Build tool nhanh
-- **TailwindCSS** - Styling
-
-### Backend
-- **Flask 3.0** - Web framework
-- **5 OCR Agents** - Extraction pipeline
-- **Authority Service** - 4 external library integrations (MESH, LCSH, LCC, NLM)
-- **SQLite Cache** - Fuzzy matching cache
-- **MARC21 Generator** - Compliant output
+**Frontend:** React 18, TypeScript, Vite, TailwindCSS  
+**Backend:** Python 3.11, Flask 3.0, SQLite  
+**APIs:** MESH, LCSH, LCC, NLM (external authorities)
 
 ## 📦 Cài đặt
 
-### Prerequisites
-```bash
-Node.js 18+
-Python 3.11+
-```
+### Backend
 
-### 1. Clone repository
-```bash
-git clone https://github.com/LockMan04/MARC-A-BOT.git
-cd MARC-A-BOT
-```
-
-### 2. Backend Setup
 ```bash
 cd backend
 python -m venv venv
 venv\Scripts\activate  # Windows
-# source venv/bin/activate  # Linux/Mac
-
 pip install -r requirements.txt
-python app.py
+python app.py  # → http://localhost:5000
 ```
 
-Backend chạy tại: `http://localhost:5000`
+### Frontend
 
-### 3. Frontend Setup
 ```bash
-cd ..  # Back to root
 npm install
-npm run dev
+npm run dev  # → http://localhost:5173
 ```
-
-Frontend chạy tại: `http://localhost:5173`
 
 ## 🚀 Sử dụng
 
-### Basic Usage - OCR Extraction
+### 1. OCR Pipeline - Extract Metadata
 
 ```python
 from backend.services.agents import MARCIntegration
 
-# Extract metadata from OCR text
 integration = MARCIntegration()
 marc_record = integration.agents_output_to_marc21(
     ocr_text="""
-    Introduction to Clinical Medicine
-    By Dr. John Smith, MD
+    Clinical Medicine Handbook
+    By Dr. John Smith
     ISBN: 978-0-123-45678-9
-    Copyright © 2024
+    © 2024
     """,
-    keywords=['Clinical Medicine'],
-    classification_frameworks=[
-        {'type': 'LCC', 'number': 'R729'}
-    ]
+    keywords=['clinical medicine']
 )
-
-# Output: Complete MARC21 record
-print(integration.format_marc_display(marc_record))
 ```
 
-### Authority Control
+### 2. AI Agent - Process Keywords
 
 ```python
-from backend.services.authority.tools import AuthorityTools
+from backend.services.agents.ai_agent_with_tools import KeywordProcessorAgent
 
-tools = AuthorityTools()
-
-# Get classification frameworks and controlled keywords
-result = tools.get_classification_and_keywords(
+agent = KeywordProcessorAgent()
+result = agent.process_keywords(
     keywords=['diabetes', 'insulin'],
     subject_type='medical'
 )
 
-# Separated output
-frameworks = result['output']['classification_framework']  # LCC/NLM numbers
-keywords = result['output']['controlled_keywords']         # MESH/LCSH terms
+# Output: classification_framework (LCC/NLM) + controlled_keywords (MESH/LCSH)
 ```
 
-### API Endpoints
+### 3. Authority API - Map Keywords
 
 ```bash
-# Authority Control
-POST /api/authority/search
-POST /api/authority/map
-POST /api/authority/classification-keywords
-
-# Health Check
-GET /api/authority/health
-GET /api/authority/cache/stats
+curl -X POST http://localhost:5000/api/authority/classification-keywords \
+  -H "Content-Type: application/json" \
+  -d '{"keywords": ["diabetes"], "subject_type": "medical"}'
 ```
 
-## 📊 Agents Overview
+## 📡 API Endpoints
 
-| Agent | Purpose | Output | MARC Field |
-|-------|---------|--------|------------|
-| **Agent 1** | Title extraction | "Clinical Medicine" | 245 |
-| **Agent 2** | Author normalization | ["Doe, John"] | 100, 700 |
-| **Agent 3** | ISBN & year | "978-X-XX-X", 2024 | 020, 260 |
-| **Agent 4** | Keywords → authorities | MESH/LCSH terms | 050, 060, 650 |
-| **Agent 5** | Document classification | "textbook" | Leader |
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/authority/search` | POST | Search authority terms |
+| `/api/authority/map` | POST | Map keywords + MARC |
+| `/api/authority/classification-keywords` | POST | Get frameworks + keywords |
+| `/api/authority/validate` | POST | Validate term |
+| `/api/authority/generate-marc` | POST | Generate MARC21 fields |
+| `/api/authority/health` | GET | Health check |
+| `/api/authority/cache/stats` | GET | Cache statistics |
+| `/api/authority/cache/clear` | POST | Clear cache |
 
-## 🧪 Testing
+## 🤖 AI Framework Integration
 
-```bash
-# Test all agents
-python demo_agents.py --mode all
+Compatible với CrewAI, LangGraph, LangChain, Gemini - Xem chi tiết tại:
+- **[AI Agent Guide](AI_AGENT_WITH_TOOLS.md)** - Hướng dẫn chi tiết
+- **[Quick Start](QUICK_START_AGENT.md)** - Setup nhanh
 
-# Test individual components
-python backend/services/agents/agent_1_title.py
-python backend/services/agents/agent_2_author.py
+```python
+# CrewAI Example
+from crewai import Agent
+agent = Agent(role='Cataloger', tools=keyword_agent.get_available_tools())
+
+# Gemini Example
+import google.generativeai as genai
+model.generate_content("Process keywords", tools=agent.get_available_tools())
 ```
+
+## 🎯 5 OCR Agents
+
+| Agent | Input | Output | MARC |
+|-------|-------|--------|------|
+| Agent 1 | OCR text | Title | 245 |
+| Agent 2 | OCR text | Author(s) | 100, 700 |
+| Agent 3 | OCR text | ISBN + Year | 020, 260 |
+| Agent 4 | Keywords | MESH/LCSH terms | 050, 060, 650 |
+| Agent 5 | OCR text | Document type | Leader |
+
+**Agent 4** = `backend/services/authority/` (toàn bộ module)
 
 ## 📁 Cấu trúc
 
@@ -144,69 +124,91 @@ python backend/services/agents/agent_2_author.py
 MARC-A-BOT/
 ├── backend/
 │   ├── services/
-│   │   ├── agents/              # 5 OCR extraction agents
+│   │   ├── agents/                    # OCR agents
 │   │   │   ├── agent_1_title.py
 │   │   │   ├── agent_2_author.py
 │   │   │   ├── agent_3_isbn_year.py
 │   │   │   ├── agent_5_doctype.py
-│   │   │   └── marc_integration.py
-│   │   └── authority/           # Authority control service
-│   │       ├── clients/         # MESH, LOC, Z39.50 clients
-│   │       ├── tools.py         # 6 tools for agents
+│   │   │   ├── ai_agent_with_tools.py # 6 AI tools
+│   │   │   └── marc_integration.py    # Combine agents
+│   │   └── authority/                 # Agent 4 - Authority Control
+│   │       ├── clients/               # MESH, LOC, Z39.50
+│   │       ├── cache/                 # SQLite cache
+│   │       ├── mappers/               # Keyword mapping
+│   │       ├── tools.py               # 6 tools interface
 │   │       └── authority_service.py
-│   ├── api/
-│   │   └── authority_routes.py  # 8 API endpoints
-│   └── app.py
-├── src/                         # React frontend
-├── demo_agents.py               # Demo script
-├── requirements.txt
+│   ├── api/authority_routes.py        # 8 endpoints
+│   ├── app.py                         # Flask app
+│   └── requirements.txt
+├── src/                               # React frontend
+│   ├── components/
+│   ├── hooks/
+│   └── types/
+├── AI_AGENT_WITH_TOOLS.md             # AI integration guide
+├── QUICK_START_AGENT.md               # Quick setup
 └── package.json
 ```
 
+## 🔧 Dependencies
+
+```
+# Backend
+Flask==3.0.0
+requests==2.31.0
+rapidfuzz==3.5.2
+pymarc==4.2.2
+pytest==7.4.3
+
+# Frontend
+react@18
+typescript@5
+vite@5
+```
+
+## 🌟 Features
+
+✅ Complete OCR pipeline (5 agents)  
+✅ Authority control (MESH, LCSH, LCC, NLM)  
+✅ MARC21 compliant output  
+✅ SQLite cache with fuzzy matching  
+✅ 6 AI tools (CrewAI/LangGraph compatible)  
+✅ 8 RESTful API endpoints  
+✅ Production ready
+
 ## 📚 Documentation
 
-- **[Authority Quick Reference](AUTHORITY_QUICK_REFERENCE.md)** - API documentation
-- **[Agents Implementation](AGENTS_IMPLEMENTATION_SUMMARY.md)** - Technical details
-- **[Quick Start Guide](AGENTS_QUICK_START.md)** - Usage examples
-- **[Backend Deployment](backend/DEPLOYMENT_GUIDE.md)** - Deployment guide
+- **[AI Agent with Tools](AI_AGENT_WITH_TOOLS.md)** - Framework integration guide
+- **[Quick Start Agent](QUICK_START_AGENT.md)** - Quick setup guide
+- **[Deployment Guide](backend/DEPLOYMENT_GUIDE.md)** - Production deployment
+- **[Architecture](backend/docs/ARCHITECTURE.md)** - System architecture
 
-## 🔧 Requirements
+## 🧪 Testing
 
-### Python
-- Flask 3.0.0
-- requests 2.31.0
-- rapidfuzz 3.5.2
-- pymarc 4.2.2
-- pytest 7.4.3
+```bash
+# Backend tests
+cd backend
+pytest tests/ -v
 
-### Node.js
-- React 18
-- TypeScript 5
-- Vite 5
-- TailwindCSS 3
+# Test authority service
+python -m services.authority.tools
 
-## 🌟 Key Features
-
-✅ **Complete OCR Pipeline** - 5 specialized agents  
-✅ **Authority Control** - 4 external library integrations  
-✅ **MARC21 Compliant** - Standard bibliographic format  
-✅ **Multilingual** - English + Vietnamese support  
-✅ **Cache System** - SQLite with fuzzy matching  
-✅ **Production Ready** - 70+ test cases
+# Test AI agent
+python services/agents/ai_agent_with_tools.py
+```
 
 ## 📝 License
 
-MIT License - See LICENSE file for details
+MIT License
 
 ## 👥 Contributors
 
-- LockMan04 - Initial work
+LockMan04 - [@LockMan04](https://github.com/LockMan04)
 
-## 🔗 Links
+## 🔗 Repository
 
-- GitHub: https://github.com/LockMan04/MARC-A-BOT
-- Branch: feature/lib-protocols-integration
+**GitHub:** [LockMan04/MARC-A-BOT](https://github.com/LockMan04/MARC-A-BOT)  
+**Branch:** feature/lib-protocols-integration
 
 ---
 
-**Status:** ✅ Production Ready | **Version:** 1.0.0 | **Updated:** Nov 2024
+**Status:** ✅ Production Ready | **Version:** 1.0.0 | **Updated:** November 2024
