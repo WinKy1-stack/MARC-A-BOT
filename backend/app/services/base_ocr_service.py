@@ -2,7 +2,7 @@ import time
 import logging
 import threading
 from typing import Dict
-from paddleocr import PaddleOCRVL
+from paddleocr import PaddleOCR
 from app.config import Config
 from app.ultis.gpu_utils import select_device
 
@@ -28,30 +28,33 @@ class BaseOCRService:
             self._initialize_pipeline()
     
     def _initialize_pipeline(self):
-        """Khởi tạo pipeline PaddleOCR-VL"""
+        """Khởi tạo pipeline PaddleOCR"""
         try:
-            device = select_device(Config.USE_GPU)
+            # PaddleOCR 3.x sử dụng device thay vì use_gpu
+            device = 'gpu:0' if Config.USE_GPU else 'cpu'
             
-            logger.info("Initializing PaddleOCR-VL pipeline on %s...", device)
+            logger.info("Initializing PaddleOCR pipeline on %s...", device)
             
-            # Khởi tạo pipeline với các features nâng cao
-            self._ocr_pipeline = PaddleOCRVL(
-                use_doc_orientation_classify=Config.USE_DOC_ORIENTATION,
-                use_doc_unwarping=Config.USE_DOC_UNWARPING,
-                use_layout_detection=Config.USE_LAYOUT_DETECTION,
-                device=device
+            # Khởi tạo PaddleOCR với device parameter (PaddleOCR 3.x)
+            self._ocr_pipeline = PaddleOCR(
+                device=device,  # 'gpu:0' hoặc 'cpu'
+                use_angle_cls=True,  # Nhận diện góc xoay
+                lang='en',  # English OCR
+                det_db_thresh=0.3,  # Detection threshold
+                det_db_box_thresh=0.5,  # Box threshold
+                rec_batch_num=6  # Batch size cho recognition
             )
             
             self._last_used = time.time()
-            logger.info("PaddleOCR-VL pipeline initialized successfully")
+            logger.info("PaddleOCR pipeline initialized successfully on %s", device)
             
             # Bắt đầu cleanup timer nếu được bật
             if Config.ENABLE_MODEL_AUTO_UNLOAD:
                 self._start_cleanup_timer()
             
         except Exception as e:
-            logger.error("Failed to initialize OCR-VL pipeline: %s", e)
-            raise RuntimeError(f"OCR-VL pipeline initialization failed: {e}")
+            logger.error("Failed to initialize OCR pipeline: %s", e)
+            raise RuntimeError(f"OCR pipeline initialization failed: {e}") from e
     
     def _ensure_pipeline_ready(self):
         """Đảm bảo pipeline đã được khởi tạo trước khi sử dụng"""
