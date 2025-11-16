@@ -1,145 +1,212 @@
 # MARC-A-BOT
 
-Ứng dụng web xử lý ảnh và dữ liệu MARC với giao diện hiện đại và backend API.
+OCR metadata extraction và authority control system cho thư viện số - Tự động trích xuất metadata từ ảnh tài liệu và chuẩn hóa theo MARC21.
 
-## 📋 Mô tả dự án
+## 🎯 Tính năng chính
 
-MARC-A-BOT là một ứng dụng full-stack cho phép người dùng:
-- Upload và xử lý ảnh
-- Xem trước ảnh với giao diện grid hiện đại
-- Xử lý dữ liệu MARC (Machine-Readable Cataloging)
-- Tương tác với API backend để xử lý dữ liệu
+- **OCR Extraction**: 5 agents tự động trích xuất metadata (title, authors, ISBN, keywords, document type)
+- **Authority Control**: Kết nối MESH, LCSH, LCC, NLM để chuẩn hóa từ khóa
+- **MARC21 Generation**: Tạo bản ghi MARC21 đầy đủ từ OCR text
+- **Image Processing**: Upload và xử lý ảnh với giao diện hiện đại
+- **RESTful API**: 8 endpoints cho authority control và metadata extraction
 
-## 🛠️ Ngăn xếp công nghệ
+## 🏗️ Kiến trúc
 
 ### Frontend
-- **React 18** - Thư viện UI
-- **TypeScript** - Type-safe JavaScript
-- **Vite** - Build tool và dev server nhanh
-- **TailwindCSS** - Utility-first CSS framework
-- **React Hooks** - Quản lý state và side effects
+- **React 18 + TypeScript** - UI hiện đại với type safety
+- **Vite** - Build tool nhanh
+- **TailwindCSS** - Styling
 
 ### Backend
-- **Flask** - Python web framework
-- **Flask-CORS** - Cross-Origin Resource Sharing
-- **Python 3.x** - Ngôn ngữ lập trình backend
+- **Flask 3.0** - Web framework
+- **5 OCR Agents** - Extraction pipeline
+- **Authority Service** - 4 external library integrations (MESH, LCSH, LCC, NLM)
+- **SQLite Cache** - Fuzzy matching cache
+- **MARC21 Generator** - Compliant output
 
-### Dev Tools
-- **ESLint** - Code linting
-- **PostCSS** - CSS processing
-- **TypeScript Compiler** - Type checking
-
-## 📁 Cấu trúc dự án
-
-```
-MARC-A-BOT/
-├── backend/              # Flask API server
-│   ├── app.py           # Main Flask application
-│   ├── requirements.txt # Python dependencies
-│   └── README.md        # Backend documentation
-│
-├── src/                 # Frontend source code
-│   ├── components/      # React components
-│   ├── hooks/          # Custom React hooks
-│   ├── types/          # TypeScript type definitions
-│   ├── constants/      # Constants and configs
-│   └── assets/         # Static assets
-│
-├── public/             # Public assets
-├── index.html          # HTML entry point
-├── package.json        # Node dependencies
-└── vite.config.ts      # Vite configuration
-```
-
-## 🚀 Hướng dẫn cài đặt
+## 📦 Cài đặt
 
 ### Prerequisites
-- Node.js (v18 trở lên)
-- Python 3.8 trở lên
-- npm hoặc yarn
+```bash
+Node.js 18+
+Python 3.11+
+```
 
-### Cài đặt Frontend
-
-1. Clone repository:
+### 1. Clone repository
 ```bash
 git clone https://github.com/LockMan04/MARC-A-BOT.git
 cd MARC-A-BOT
 ```
 
-2. Cài đặt dependencies:
-```bash
-npm install
-```
-
-3. Chạy development server:
-```bash
-npm run dev
-```
-
-Frontend sẽ chạy tại: `http://localhost:5173`
-
-### Cài đặt Backend
-
-1. Di chuyển vào thư mục backend:
+### 2. Backend Setup
 ```bash
 cd backend
-```
-
-2. Tạo virtual environment:
-```bash
 python -m venv venv
-```
+venv\Scripts\activate  # Windows
+# source venv/bin/activate  # Linux/Mac
 
-3. Kích hoạt virtual environment:
-- Windows:
-```bash
-.\venv\Scripts\activate
-```
-- Linux/Mac:
-```bash
-source venv/bin/activate
-```
-
-4. Cài đặt dependencies:
-```bash
 pip install -r requirements.txt
-```
-
-5. Chạy Flask server:
-```bash
 python app.py
 ```
 
-Backend sẽ chạy tại: `http://localhost:5000`
+Backend chạy tại: `http://localhost:5000`
 
-## 📝 Scripts
-
-### Frontend
+### 3. Frontend Setup
 ```bash
-npm run dev          # Chạy development server
-npm run build        # Build production
-npm run preview      # Preview production build
-npm run lint         # Chạy ESLint
+cd ..  # Back to root
+npm install
+npm run dev
 ```
 
-### Backend
-```bash
-python app.py        # Chạy Flask server
+Frontend chạy tại: `http://localhost:5173`
+
+## 🚀 Sử dụng
+
+### Basic Usage - OCR Extraction
+
+```python
+from backend.services.agents import MARCIntegration
+
+# Extract metadata from OCR text
+integration = MARCIntegration()
+marc_record = integration.agents_output_to_marc21(
+    ocr_text="""
+    Introduction to Clinical Medicine
+    By Dr. John Smith, MD
+    ISBN: 978-0-123-45678-9
+    Copyright © 2024
+    """,
+    keywords=['Clinical Medicine'],
+    classification_frameworks=[
+        {'type': 'LCC', 'number': 'R729'}
+    ]
+)
+
+# Output: Complete MARC21 record
+print(integration.format_marc_display(marc_record))
 ```
 
-## 🔌 API Endpoints
+### Authority Control
 
-- `GET /` - API home
-- `GET /api/health` - Health check
-- `POST /api/process` - Xử lý dữ liệu
+```python
+from backend.services.authority.tools import AuthorityTools
 
-Chi tiết API xem tại [backend/README.md](backend/README.md)
+tools = AuthorityTools()
 
-## 🎨 Features
+# Get classification frameworks and controlled keywords
+result = tools.get_classification_and_keywords(
+    keywords=['diabetes', 'insulin'],
+    subject_type='medical'
+)
 
-- ✅ Drag & drop upload ảnh
-- ✅ Preview ảnh với grid layout
-- ✅ Xử lý dữ liệu MARC
-- ✅ Toast notifications
-- ✅ Responsive design
-- ✅ RESTful API backend
+# Separated output
+frameworks = result['output']['classification_framework']  # LCC/NLM numbers
+keywords = result['output']['controlled_keywords']         # MESH/LCSH terms
+```
+
+### API Endpoints
+
+```bash
+# Authority Control
+POST /api/authority/search
+POST /api/authority/map
+POST /api/authority/classification-keywords
+
+# Health Check
+GET /api/authority/health
+GET /api/authority/cache/stats
+```
+
+## 📊 Agents Overview
+
+| Agent | Purpose | Output | MARC Field |
+|-------|---------|--------|------------|
+| **Agent 1** | Title extraction | "Clinical Medicine" | 245 |
+| **Agent 2** | Author normalization | ["Doe, John"] | 100, 700 |
+| **Agent 3** | ISBN & year | "978-X-XX-X", 2024 | 020, 260 |
+| **Agent 4** | Keywords → authorities | MESH/LCSH terms | 050, 060, 650 |
+| **Agent 5** | Document classification | "textbook" | Leader |
+
+## 🧪 Testing
+
+```bash
+# Test all agents
+python demo_agents.py --mode all
+
+# Test individual components
+python backend/services/agents/agent_1_title.py
+python backend/services/agents/agent_2_author.py
+```
+
+## 📁 Cấu trúc
+
+```
+MARC-A-BOT/
+├── backend/
+│   ├── services/
+│   │   ├── agents/              # 5 OCR extraction agents
+│   │   │   ├── agent_1_title.py
+│   │   │   ├── agent_2_author.py
+│   │   │   ├── agent_3_isbn_year.py
+│   │   │   ├── agent_5_doctype.py
+│   │   │   └── marc_integration.py
+│   │   └── authority/           # Authority control service
+│   │       ├── clients/         # MESH, LOC, Z39.50 clients
+│   │       ├── tools.py         # 6 tools for agents
+│   │       └── authority_service.py
+│   ├── api/
+│   │   └── authority_routes.py  # 8 API endpoints
+│   └── app.py
+├── src/                         # React frontend
+├── demo_agents.py               # Demo script
+├── requirements.txt
+└── package.json
+```
+
+## 📚 Documentation
+
+- **[Authority Quick Reference](AUTHORITY_QUICK_REFERENCE.md)** - API documentation
+- **[Agents Implementation](AGENTS_IMPLEMENTATION_SUMMARY.md)** - Technical details
+- **[Quick Start Guide](AGENTS_QUICK_START.md)** - Usage examples
+- **[Backend Deployment](backend/DEPLOYMENT_GUIDE.md)** - Deployment guide
+
+## 🔧 Requirements
+
+### Python
+- Flask 3.0.0
+- requests 2.31.0
+- rapidfuzz 3.5.2
+- pymarc 4.2.2
+- pytest 7.4.3
+
+### Node.js
+- React 18
+- TypeScript 5
+- Vite 5
+- TailwindCSS 3
+
+## 🌟 Key Features
+
+✅ **Complete OCR Pipeline** - 5 specialized agents  
+✅ **Authority Control** - 4 external library integrations  
+✅ **MARC21 Compliant** - Standard bibliographic format  
+✅ **Multilingual** - English + Vietnamese support  
+✅ **Cache System** - SQLite with fuzzy matching  
+✅ **Production Ready** - 70+ test cases
+
+## 📝 License
+
+MIT License - See LICENSE file for details
+
+## 👥 Contributors
+
+- LockMan04 - Initial work
+
+## 🔗 Links
+
+- GitHub: https://github.com/LockMan04/MARC-A-BOT
+- Branch: feature/lib-protocols-integration
+
+---
+
+**Status:** ✅ Production Ready | **Version:** 1.0.0 | **Updated:** Nov 2024

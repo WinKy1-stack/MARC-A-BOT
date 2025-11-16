@@ -117,6 +117,27 @@ class AuthorityTools:
                     }
                 },
                 'function': self.get_cache_statistics
+            },
+            {
+                'name': 'get_classification_and_keywords',
+                'description': 'Lấy KHUNG PHÂN LOẠI (LCC/NLM) và TỪ KHÓA (Subject Headings) từ keywords',
+                'parameters': {
+                    'type': 'object',
+                    'properties': {
+                        'keywords': {
+                            'type': 'array',
+                            'items': {'type': 'string'},
+                            'description': 'Danh sách keywords cần xử lý'
+                        },
+                        'subject_type': {
+                            'type': 'string',
+                            'enum': ['medical', 'general', 'science'],
+                            'description': 'Loại chủ đề (medical → NLM, general/science → LCC)'
+                        }
+                    },
+                    'required': ['keywords']
+                },
+                'function': self.get_classification_and_keywords
             }
         ]
         
@@ -272,3 +293,141 @@ class AuthorityTools:
                 'error': str(e),
                 'statistics': {}
             }
+    
+    def get_classification_and_keywords(self, keywords: List[str], 
+                                       subject_type: str = 'general') -> Dict[str, Any]:
+        """
+        Tool: Get classification framework and controlled keywords
+        
+        Output bao gồm:
+        - KHUNG PHÂN LOẠI: LCC (050) hoặc NLM (060) classification numbers
+        - TỪ KHÓA CHUẨN: LCSH hoặc MESH controlled vocabulary
+        
+        Args:
+            keywords: List of raw keywords
+            subject_type: Subject type (medical → NLM/MESH, general → LCC/LCSH)
+            
+        Returns:
+            Dictionary containing:
+                - classification_framework: Khung phân loại (LCC/NLM numbers)
+                - controlled_keywords: Từ khóa chuẩn (MESH/LCSH terms)
+                - marc_050_060_fields: MARC21 050/060 classification fields
+                - marc_650_fields: MARC21 650 subject heading fields
+        """
+        try:
+            # Process keywords
+            result = self.service.process_keywords(keywords, subject_type)
+            authorities = result['authorities']
+            
+            # Separate classification numbers and subject headings
+            classification_framework = []
+            controlled_keywords = []
+            
+            for auth in authorities:
+                source = auth.get('source', '')
+                term = auth.get('term', '')
+                auth_id = auth.get('authority_id', '')
+                metadata = auth.get('metadata', {})
+                
+                # Classification frameworks (LCC/NLM)
+                if source == 'LCC':
+                    classification_framework.append({
+                        'framework': 'LCC',
+                        'classification_number': auth_id,
+                        'description': term,
+                        'marc_field': '050'
+                    })
+                elif source == 'NLM':
+                    classification_framework.append({
+                        'framework': 'NLM',
+                        'classification_number': auth_id,
+                        'description': term,
+                        'marc_field': '060'
+                    })
+                
+                # Controlled keywords (MESH/LCSH)
+                if source in ['MESH', 'LCSH']:
+                    controlled_keywords.append({
+                        'keyword': term,
+                        'vocabulary': source,
+                        'term_id': auth_id,
+                        'confidence': auth.get('score', 0),
+                        'marc_field': '650'
+                    })
+                elif source == 'UNCONTROLLED':
+                    controlled_keywords.append({
+                        'keyword': term,
+                        'vocabulary': 'UNCONTROLLED',
+                        'term_id': '',
+                        'confidence': 0,
+                        'marc_field': '650',
+                        'note': 'Keyword không tìm thấy trong controlled vocabulary'
+                    })
+            
+            # Generate MARC fields for classifications
+            marc_classification_fields = self._generate_classification_marc_fields(
+                classification_framework
+            )
+            
+            return {
+                'success': True,
+                'input_keywords': keywords,
+                'subject_type': subject_type,
+                'output': {
+                    'classification_framework': classification_framework,
+                    'controlled_keywords': controlled_keywords
+                },
+                'marc_fields': {
+                    'classification': marc_classification_fields,  # 050/060 fields
+                    'subjects': result['marc_fields']  # 650 fields
+                },
+                'summary': {
+                    'total_keywords': len(keywords),
+                    'classifications_found': len(classification_framework),
+                    'controlled_terms_found': len([k for k in controlled_keywords 
+                                                   if k['vocabulary'] != 'UNCONTROLLED']),
+                    'uncontrolled_terms': len([k for k in controlled_keywords 
+                                              if k['vocabulary'] == 'UNCONTROLLED'])
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"Error in get_classification_and_keywords: {e}")
+            return {
+                'success': False,
+                'error': str(e),
+                'output': {
+                    'classification_framework': [],
+                    'controlled_keywords': []
+                },
+                'marc_fields': {
+                    'classification': [],
+                    'subjects': []
+                }
+            }
+    
+    def _generate_classification_marc_fields(self, 
+                                            classifications: List[Dict]) -> List[str]:
+        """
+        Generate MARC21 050/060 fields for classification numbers
+        
+        Args:
+            classifications: List of classification framework items
+            
+        Returns:
+            List of formatted MARC fields
+        """
+        marc_fields = []
+        
+        for cls in classifications:
+            framework = cls['framework']
+            number = cls['classification_number']
+            
+            if framework == 'LCC':
+                # 050 - Library of Congress Call Number
+                marc_fields.append(f"050 _4 $a {number}")
+            elif framework == 'NLM':
+                # 060 - National Library of Medicine Call Number
+                marc_fields.append(f"060 _4 $a {number}")
+        
+        return marc_fields

@@ -151,6 +151,61 @@ def get_cache_stats():
         return jsonify({'error': str(e)}), 500
 
 
+@authority_bp.route('/classification-keywords', methods=['POST'])
+def get_classification_keywords():
+    """
+    Get classification framework (LCC/NLM) and controlled keywords (MESH/LCSH)
+    
+    Request body:
+        {
+            "keywords": ["diabetes", "treatment", "clinical"],
+            "subject_type": "medical"  # medical, general, science
+        }
+    
+    Response:
+        {
+            "success": true,
+            "output": {
+                "classification_framework": [
+                    {
+                        "framework": "NLM",
+                        "classification_number": "WK 810",
+                        "description": "Diabetes Mellitus",
+                        "marc_field": "060"
+                    }
+                ],
+                "controlled_keywords": [
+                    {
+                        "keyword": "Diabetes Mellitus",
+                        "vocabulary": "MESH",
+                        "term_id": "D003920",
+                        "confidence": 95.5,
+                        "marc_field": "650"
+                    }
+                ]
+            },
+            "marc_fields": {
+                "classification": ["060 _4 $a WK 810"],
+                "subjects": ["650 _2 $a Diabetes Mellitus"]
+            }
+        }
+    """
+    try:
+        data = request.get_json()
+        keywords = data.get('keywords', [])
+        subject_type = data.get('subject_type', 'general')
+        
+        if not keywords:
+            return jsonify({'error': 'keywords is required'}), 400
+        
+        result = authority_tools.get_classification_and_keywords(keywords, subject_type)
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"Error in get_classification_keywords: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
 @authority_bp.route('/tools', methods=['GET'])
 def get_tool_definitions():
     """

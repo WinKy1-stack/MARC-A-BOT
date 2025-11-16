@@ -1,34 +1,27 @@
-# ============================================================================
 # MARC-A-BOT Backend Dependencies
-# ============================================================================
+# Last updated: November 2024
 
-# -----------------------------------------------------------------------------
 # Core Web Framework
-# -----------------------------------------------------------------------------
-Flask==3.0.0                    # Web framework
-flask-cors==4.0.0               # CORS support for API
-python-dotenv==1.0.0            # Environment variable management
+Flask==3.0.0
+flask-cors==4.0.0
+python-dotenv==1.0.0
+Werkzeug==3.0.1
 
-# -----------------------------------------------------------------------------
-# Authority Control Service Dependencies
-# -----------------------------------------------------------------------------
-requests==2.31.0                # HTTP client for external APIs (MESH, LOC)
-rapidfuzz==3.5.2                # Fuzzy string matching for cache
+# Authority Control - External API Integration
+requests==2.31.0                # HTTP client for MESH, LOC APIs
+urllib3==2.1.0
+certifi==2023.11.17
+
+# Authority Control - Fuzzy Matching & Cache
+rapidfuzz==3.5.2                # Fuzzy string matching
+# sqlite3 - Built-in Python module
+
+# MARC21 Processing
 pymarc==4.2.2                   # MARC record parsing and generation
 
-# PyZ3950==3.0.1                # [OPTIONAL] Z39.50 protocol support
-                                # Uncomment if you need Z39.50 functionality
-                                # Note: May require additional system dependencies
+# Testing
+pytest==7.4.3
+pytest-cov==4.1.0
 
-# -----------------------------------------------------------------------------
-# Testing & Quality Assurance
-# -----------------------------------------------------------------------------
-pytest==7.4.3                   # Testing framework
-pytest-cov==4.1.0               # Test coverage reporting
-
-# -----------------------------------------------------------------------------
-# Development Tools (Optional - install separately if needed)
-# -----------------------------------------------------------------------------
-# black==23.12.0                # Code formatter
-# flake8==6.1.0                 # Linter
-# mypy==1.7.1                   # Type checker
+# Optional - Z39.50 Protocol (NLM)
+# PyZ3950==3.0.1                # Uncomment if needed
