@@ -4,6 +4,14 @@ from flask_cors import CORS
 from app.config import Config
 from app.routes.ocr_routes import ocr_bp
 
+# Import authority routes
+try:
+    from api.authority_routes import authority_bp
+    HAS_AUTHORITY = True
+except ImportError:
+    HAS_AUTHORITY = False
+    logging.warning("Authority routes not available")
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -25,21 +33,28 @@ Config.init_app()
 
 # Register blueprints
 app.register_blueprint(ocr_bp)
+if HAS_AUTHORITY:
+    app.register_blueprint(authority_bp)
 
 @app.route('/')
 def home():
     """Endpoint gốc của API"""
+    endpoints = {
+        'health': '/api/health',
+        'ocr_single': '/api/ocr/process',
+        'ocr_batch': '/api/ocr/batch',
+        'ocr_status': '/api/ocr/status',
+        'ocr_download': '/api/ocr/download/<file_id>/<file_type>'
+    }
+    
+    if HAS_AUTHORITY:
+        endpoints['authority'] = '/api/authority'
+    
     return jsonify({
         'message': 'Welcome to MARC-A-BOT Backend API',
         'status': 'running',
         'version': '1.0.0',
-        'endpoints': {
-            'health': '/api/health',
-            'ocr_single': '/api/ocr/process',
-            'ocr_batch': '/api/ocr/batch',
-            'ocr_status': '/api/ocr/status',
-            'ocr_download': '/api/ocr/download/<file_id>/<file_type>'
-        }
+        'endpoints': endpoints
     })
 
 @app.route('/api/health', methods=['GET'])
