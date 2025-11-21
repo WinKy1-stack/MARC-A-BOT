@@ -2,11 +2,13 @@ import React from 'react';
 import { Header } from '../Header';
 import { Dropzone } from '../Dropzone';
 import { MARCViewer } from '../MARCViewer';
-import type { FilePreviewItem } from '../../types';
+import { OCRTextViewer } from '../OCRTextViewer';
+import type { FilePreviewItem, OCRResult } from '../../types';
 
 interface MainLayoutProps {
   files: FilePreviewItem[];
   marcData: string | null;
+  ocrResults: Map<string, OCRResult>;
   onDrop: (files: File[]) => void;
   onRemove: (id: string) => void;
   onProcess?: () => void;
@@ -18,6 +20,7 @@ interface MainLayoutProps {
 export const MainLayout: React.FC<MainLayoutProps> = ({
   files,
   marcData,
+  ocrResults,
   onDrop,
   onRemove,
   onProcess,
@@ -25,12 +28,19 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
   onImageClick,
   onClearAll,
 }) => {
+  // Get the first OCR result to display
+  const firstOcrResult = files.length > 0 && ocrResults.size > 0 
+    ? ocrResults.get(files[0].id)
+    : null;
+
+  const hasOcrResults = ocrResults.size > 0;
+
   return (
     <>
       <Header onClearAll={files.length > 0 ? onClearAll : undefined} />
 
       <div className="flex-1 overflow-hidden">
-        {marcData ? (
+        {hasOcrResults ? (
           <div className="h-full flex flex-col sm:flex-row gap-4 p-4 animate-in fade-in duration-500">
             <div className="w-full sm:w-1/2 flex-shrink-0 overflow-y-auto animate-in slide-in-from-left duration-500">
               <Dropzone
@@ -40,12 +50,20 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
                 onProcess={onProcess}
                 onReset={onReset}
                 disabled={true}
-                hasMarcData={true}
+                hasMarcData={hasOcrResults}
                 onImageClick={onImageClick}
               />
             </div>
             <div className="w-full sm:w-1/2 flex-shrink-0 h-full animate-in slide-in-from-right fade-in duration-500 delay-150">
-              <MARCViewer marcData={marcData} />
+              {marcData ? (
+                <MARCViewer marcData={marcData} />
+              ) : firstOcrResult ? (
+                <OCRTextViewer ocrResult={firstOcrResult} />
+              ) : (
+                <div className="h-full flex items-center justify-center text-gray-500">
+                  <p>No OCR results available</p>
+                </div>
+              )}
             </div>
           </div>
         ) : (

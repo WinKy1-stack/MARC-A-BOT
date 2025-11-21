@@ -17,6 +17,7 @@ class BaseOCRService:
     _last_used = None
     _cleanup_timer = None
     _lock = threading.Lock()
+    _ocr_lock = threading.Lock()  # Lock riêng cho OCR inference để tránh tensor conflicts
     
     def __new__(cls):
         if cls._instance is None:
@@ -40,8 +41,8 @@ class BaseOCRService:
                 device=device,  # 'gpu:0' hoặc 'cpu'
                 use_angle_cls=True,  # Nhận diện góc xoay
                 lang='en',  # English OCR
-                det_db_thresh=0.3,  # Detection threshold
-                det_db_box_thresh=0.5,  # Box threshold
+                det_db_thresh=0.2,  # Detection threshold (giảm để phát hiện text tốt hơn)
+                det_db_box_thresh=0.3,  # Box threshold (giảm để phát hiện text tốt hơn)
                 rec_batch_num=6  # Batch size cho recognition
             )
             
@@ -128,6 +129,46 @@ class BaseOCRService:
                 gc.collect()
                 
                 logger.info("OCR model unloaded")
+    
+    def get_pipeline(self):
+        """Lấy OCR pipeline (khởi tạo nếu chưa có)"""
+        with self._lock:
+            if self._ocr_pipeline is None:
+                self._initialize_pipeline()
+            self._update_last_used()
+            return self._ocr_pipeline
+    
+    def ocr_inference(self, image_path, **kwargs):
+        """Thread-safe OCR inference với retry logic để tránh tensor conflicts"""
+        max_retries = 3
+        retry_delay = 0.5
+        
+        for attempt in range(max_retries):
+            try:
+                with self._ocr_lock:  # Chỉ cho phép 1 thread inference tại 1 thời điểm
+                    pipeline = self.get_pipeline()
+                    result = pipeline.ocr(str(image_path), **kwargs)
+                    return result
+            except Exception as e:  # pylint: disable=broad-except
+                error_msg = str(e)
+                # Xử lý lỗi tensor của PaddlePaddle
+                if "Tensor holds no memory" in error_msg or "PreconditionNotMetError" in error_msg:
+                    logger.warning(f"PaddleOCR tensor error (attempt {attempt+1}/{max_retries}): {error_msg}")
+                    if attempt < max_retries - 1:
+                        time.sleep(retry_delay * (attempt + 1))
+                        # Reload pipeline để reset state
+                        with self._lock:
+                            if self._ocr_pipeline is not None:
+                                del self._ocr_pipeline
+                                self._ocr_pipeline = None
+                                import gc
+                                gc.collect()
+                            self._initialize_pipeline()
+                        continue
+                # Lỗi khác thì raise ngay
+                raise
+        
+        raise RuntimeError(f"OCR inference failed after {max_retries} attempts due to tensor errors")
     
     def get_model_status(self) -> Dict:
         """Lấy trạng thái hiện tại của pipeline"""

@@ -38,7 +38,7 @@ class BatchProcessor(BaseOCRService):
         self, 
         file_paths: List[str], 
         file_ids: Optional[List[str]] = None,
-        max_workers: int = 3
+        max_workers: int = 2  # Giảm từ 3 xuống 2 để tránh PaddlePaddle tensor conflicts
     ) -> List[Dict]:
         """
         Xử lý nhiều ảnh/PDF cùng lúc với xử lý đồng thời

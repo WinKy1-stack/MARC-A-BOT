@@ -74,10 +74,10 @@ class PDFProcessor(BaseOCRService):
                         temp_image_path = os.path.join(temp_dir, f"page_{idx+1}.jpg")
                         image.save(temp_image_path, 'JPEG', quality=95)
                         
-                        logger.info("Processing page %d/%d...", idx+1, len(images))
+                        logger.info("Processing page %d/%d", idx+1, len(images))
                         
-                        # OCR on image (PaddleOCR 3.x không dùng cls parameter)
-                        page_results = self._ocr_pipeline.ocr(temp_image_path)  # Bỏ cls=True
+                        # OCR với thread-safe inference
+                        page_results = self.ocr_inference(temp_image_path)  # Dùng method từ BaseOCRService
                         
                         page_text = ""
                         confidence_scores = []

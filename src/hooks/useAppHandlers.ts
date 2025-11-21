@@ -7,7 +7,7 @@ interface UseAppHandlersProps {
   addFiles: (files: File[]) => void;
   removeFile: (id: string) => void;
   clearAll: () => void;
-  processImages: (files: File[]) => Promise<number>;
+  processImages: (files: FilePreviewItem[]) => Promise<number>;
   resetMARC: () => void;
 }
 
@@ -63,11 +63,8 @@ export const useAppHandlers = ({
       return;
     }
 
-    // Chuyển FilePreviewItem thành File objects
-    const fileObjects = files.map((f) => f.file);
-
     try {
-      const fileCount = await processImages(fileObjects);
+      const fileCount = await processImages(files);
       toast.success(
         `Đã xử lý thành công ${fileCount} ${fileCount === 1 ? 'ảnh' : 'ảnh'}!`,
         {

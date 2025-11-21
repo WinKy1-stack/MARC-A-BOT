@@ -22,12 +22,20 @@ def process_file():
     Response: JSON chứa kết quả OCR bao gồm markdown
     """
     try:
+        # Log request info for debugging
+        logger.info(f"Received OCR request - Method: {request.method}")
+        logger.info(f"Content-Type: {request.content_type}")
+        logger.info(f"Files in request: {list(request.files.keys())}")
+        logger.info(f"Form in request: {list(request.form.keys())}")
+        logger.info(f"Request headers: {dict(request.headers)}")
+        
         # Check if file is in request
         if 'file' not in request.files:
+            logger.error(f"No 'file' field in request. Available fields: {list(request.files.keys())}")
             return jsonify({
                 "status": "error",
                 "error_code": "NO_FILE",
-                "message": "No file provided"
+                "message": "No file provided. Expected 'file' field in multipart/form-data"
             }), 400
         
         file = request.files['file']

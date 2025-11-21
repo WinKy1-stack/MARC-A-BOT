@@ -6,24 +6,24 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api/
 
 export interface OCRResult {
   status: 'success' | 'error' | 'queued';
-  file_id?: string;
-  extracted_text?: string;
+  image_id?: string;
+  ocr_text?: string;  // Text extracted by OCR
   markdown?: string;
-  sections?: {
-    title?: string;
-    author?: string;
-    publisher?: string;
-    isbn?: string;
-    year?: string;
-  };
   confidence?: number;
-  processing_time?: number;
-  timestamp?: string;
-  error_code?: string;
-  message?: string;
+  processing_time_ms?: number;
+  output_files?: {
+    json?: string;
+    markdown?: string;
+  };
+  layout_detected?: boolean;
+  error?: string;
+  
+  // Queue-related fields
+  request_id?: string;
   queue_position?: number;
   estimated_wait_time?: number;
-  request_id?: string;
+  message?: string;
+  error_code?: string;
 }
 
 export interface BatchOCRResult {
@@ -77,21 +77,50 @@ class OCRService {
    * Xử lý một file ảnh để OCR
    */
   async processFile(file: File): Promise<OCRResult> {
+    // Validate file
+    if (!file) {
+      console.error('OCR Service: No file provided');
+      throw new Error('No file provided');
+    }
+
+    if (!(file instanceof File)) {
+      console.error('OCR Service: Invalid file type', typeof file, file);
+      throw new Error('Invalid file type');
+    }
+
+    console.log('OCR Service: Processing file', {
+      name: file.name,
+      type: file.type,
+      size: file.size,
+    });
+
     const formData = new FormData();
     formData.append('file', file);
 
+    // Log FormData contents
+    console.log('OCR Service: FormData contents');
+    for (const [key, value] of formData.entries()) {
+      console.log(`  ${key}:`, value);
+    }
+
     try {
+      console.log('OCR Service: Sending request to', this.baseUrl);
+      
       const response = await fetch(`${this.baseUrl}`, {
         method: 'POST',
         body: formData,
       });
 
+      console.log('OCR Service: Response status', response.status);
+
       if (!response.ok) {
         const errorData = await response.json();
+        console.error('OCR Service: Error response', errorData);
         throw new Error(errorData.message || 'OCR processing failed');
       }
 
       const result: OCRResult = await response.json();
+      console.log('OCR Service: Success', result);
       return result;
     } catch (error) {
       console.error('Error processing file:', error);
