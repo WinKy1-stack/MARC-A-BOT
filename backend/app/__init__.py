@@ -4,8 +4,7 @@ import logging
 from flask import Flask
 from flask_cors import CORS
 from .config import Config
-from .routes import health_bp, ocr_bp
-from .routes.test_routes import test_bp
+from .routes import health_bp, ocr_bp, sse_bp
 
 def setup_logging():
     """Setup logging configuration"""
@@ -35,7 +34,7 @@ def create_app():
     # Register blueprints
     app.register_blueprint(health_bp)
     app.register_blueprint(ocr_bp)
-    app.register_blueprint(test_bp)
+    app.register_blueprint(sse_bp)
     
     # Log startup
     logger = logging.getLogger(__name__)

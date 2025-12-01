@@ -37,6 +37,7 @@ class QueuedRequest:
     status: RequestStatus = RequestStatus.PENDING
     result: Any = None
     error: Optional[str] = None
+    progress_info: Optional[Dict[str, Any]] = None  # Detailed progress information
 
 
 class RequestQueueManager:
@@ -110,76 +111,49 @@ class RequestQueueManager:
                     'queued': False
                 }
         
-        # Kiểm tra xem có thể xử lý ngay không
-        with self.active_lock:
-            can_process_now = self.active_requests < Config.MAX_CONCURRENT_REQUESTS
-            
-            if can_process_now:
-                self.active_requests += 1
-        
-        if can_process_now:
-            # Xử lý ngay
-            try:
-                result = func(*args, **kwargs)
-                self.total_processed += 1
-                return {
-                    'status': 'completed',
-                    'result': result,
-                    'queued': False
-                }
-            except Exception as e:
-                logger.error("Error processing request %s: %s", request_id, e)
-                self.total_failed += 1
-                return {
-                    'status': 'failed',
-                    'error': str(e),
-                    'queued': False
-                }
-            finally:
-                with self.active_lock:
-                    self.active_requests -= 1
-                self._process_next_in_queue()
-        
-        else:
-            # Đưa vào queue
-            try:
-                queued_request = QueuedRequest(
-                    request_id=request_id,
-                    func=func,
-                    args=args,
-                    kwargs=kwargs,
-                    created_at=time.time()
-                )
-                
-                self.queue.put(queued_request, block=False)
-                
-                with self.requests_lock:
-                    self.requests_dict[request_id] = queued_request
-                
-                self.total_queued += 1
-                
-                logger.info(
-                    "Request %s queued. Queue size: %d",
-                    request_id,
-                    self.queue.qsize()
-                )
-                
-                return {
-                    'status': 'queued',
-                    'request_id': request_id,
-                    'queue_position': self.queue.qsize(),
-                    'estimated_wait_time': self._estimate_wait_time(),
-                    'queued': True
-                }
-            
-            except Full:
-                logger.error("Queue is full, rejecting request %s", request_id)
-                return {
-                    'status': 'rejected',
-                    'error': 'Queue is full',
-                    'queue_size': Config.QUEUE_MAX_SIZE,
-                    'queued': False
-                }
+        # LUÔN queue request để có thể track progress qua SSE
+        # Ngay cả khi có slot trống, vẫn đưa vào queue và xử lý background
+        try:
+            queued_request = QueuedRequest(
+                request_id=request_id,
+                func=func,
+                args=args,
+                kwargs=kwargs,
+                created_at=time.time()
+            )
+
+            self.queue.put(queued_request, block=False)
+
+            with self.requests_lock:
+                self.requests_dict[request_id] = queued_request
+
+            self.total_queued += 1
+
+            logger.info(
+                "Request %s queued. Queue size: %d",
+                request_id,
+                self.queue.qsize()
+            )
+
+            # Trigger processing ngay nếu có slot trống
+            self._process_next_in_queue()
+
+            return {
+                'status': 'queued',
+                'request_id': request_id,
+                'queue_position': self.queue.qsize(),
+                'estimated_wait_time': self._estimate_wait_time(),
+                'queued': True
+            }
+
+        except Full:
+            logger.error("Queue is full, rejecting request %s", request_id)
+            return {
+                'status': 'rejected',
+                'error': 'Queue is full',
+                'queue_size': Config.QUEUE_MAX_SIZE,
+                'queued': False
+            }
     
     def _process_next_in_queue(self):
         """Xử lý request tiếp theo trong queue"""
@@ -251,20 +225,20 @@ class RequestQueueManager:
     def get_request_status(self, request_id: str) -> Optional[Dict[str, Any]]:
         """
         Lấy trạng thái của request
-        
+
         Args:
             request_id: ID của request
-            
+
         Returns:
             Dictionary chứa trạng thái hoặc None
         """
         with self.requests_lock:
             queued_request = self.requests_dict.get(request_id)
-        
+
         if queued_request is None:
             return None
-        
-        return {
+
+        status_dict = {
             'request_id': request_id,
             'status': queued_request.status.value,
             'created_at': queued_request.created_at,
@@ -272,6 +246,27 @@ class RequestQueueManager:
             'result': queued_request.result,
             'error': queued_request.error
         }
+
+        # Include progress info if available
+        if queued_request.progress_info:
+            status_dict['progress_info'] = queued_request.progress_info
+
+        return status_dict
+
+    def update_request_progress(self, request_id: str, progress_info: Dict[str, Any]):
+        """
+        Cập nhật progress information cho request
+
+        Args:
+            request_id: ID của request
+            progress_info: Dictionary chứa thông tin tiến trình
+                          VD: {'step': 'loading_model', 'message': 'Đang load model...', 'progress': 10}
+        """
+        with self.requests_lock:
+            queued_request = self.requests_dict.get(request_id)
+            if queued_request:
+                queued_request.progress_info = progress_info
+                logger.debug("Progress updated for request %s: %s", request_id, progress_info)
     
     def _estimate_wait_time(self) -> int:
         """

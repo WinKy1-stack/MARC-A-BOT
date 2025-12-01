@@ -6,6 +6,7 @@ from flask import Blueprint, jsonify
 import logging
 
 from .ocr_routes import ocr_bp
+from .sse_routes import sse_bp
 
 logger = logging.getLogger(__name__)
 
@@ -48,3 +49,4 @@ def home():
     })
 
 __all__ = ['health_bp', 'ocr_bp']
+__all__.append('sse_bp')

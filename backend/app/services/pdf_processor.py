@@ -10,6 +10,7 @@ from app.services.ocr_utils import (
     extract_text_from_result,
     calculate_confidence
 )
+from app.ultis.request_queue import queue_manager
 
 logger = logging.getLogger(__name__)
 
@@ -46,34 +47,69 @@ class PDFProcessor(BaseOCRService):
         }
         
         try:
+            # Report progress: Bắt đầu xử lý PDF
+            queue_manager.update_request_progress(image_id, {
+                "step": "starting",
+                "message": "Bắt đầu xử lý PDF...",
+                "progress": 5
+            })
+
             # Check if pipeline needs reinitialization
+            queue_manager.update_request_progress(image_id, {
+                "step": "loading_model",
+                "message": "Đang tải mô hình OCR...",
+                "progress": 10
+            })
             self._ensure_pipeline_ready()
-            
+
             logger.info("Processing PDF %s with PaddleOCR...", pdf_path)
-            
+
             # Convert PDF to images first (PaddleOCR doesn't directly support PDF)
             from pdf2image import convert_from_path
             import tempfile
             import os
             import shutil
-            
+
             temp_dir = tempfile.mkdtemp()
             text_list = []
             pages_data = []
-            
+
             try:
                 # Convert PDF to images
+                queue_manager.update_request_progress(image_id, {
+                    "step": "converting_pdf",
+                    "message": "Đang chuyển đổi PDF sang hình ảnh...",
+                    "progress": 15
+                })
                 logger.info("Converting PDF to images...")
                 images = convert_from_path(pdf_path, dpi=200)
                 logger.info("Converted %d pages", len(images))
+
+                queue_manager.update_request_progress(image_id, {
+                    "step": "converted",
+                    "message": f"Đã chuyển đổi {len(images)} trang",
+                    "progress": 20,
+                    "total_pages": len(images)
+                })
                 
                 # Process each page
                 for idx, image in enumerate(images):
                     try:
+                        # Report progress for each page
+                        # Progress từ 20% -> 80% cho việc xử lý các trang
+                        page_progress = 20 + int((idx / len(images)) * 60)
+                        queue_manager.update_request_progress(image_id, {
+                            "step": "processing_page",
+                            "message": f"Đang xử lý trang {idx+1}/{len(images)}...",
+                            "progress": page_progress,
+                            "current_page": idx + 1,
+                            "total_pages": len(images)
+                        })
+
                         # Save temp image
                         temp_image_path = os.path.join(temp_dir, f"page_{idx+1}.jpg")
                         image.save(temp_image_path, 'JPEG', quality=95)
-                        
+
                         logger.info("Processing page %d/%d", idx+1, len(images))
                         
                         # OCR với thread-safe inference
@@ -133,8 +169,14 @@ class PDFProcessor(BaseOCRService):
                     logger.warning("Failed to cleanup temp dir: %s", cleanup_error)
             
             combined_text = "\n\n".join(text_list)
-            
+
             # Save combined result
+            queue_manager.update_request_progress(image_id, {
+                "step": "saving_results",
+                "message": "Đang lưu kết quả...",
+                "progress": 85
+            })
+
             output_dir = Config.OUTPUT_FOLDER / image_id
             output_dir.mkdir(exist_ok=True, parents=True)
             
@@ -163,7 +205,13 @@ class PDFProcessor(BaseOCRService):
             })
             
             self._update_last_used()
-            
+
+            queue_manager.update_request_progress(image_id, {
+                "step": "completed",
+                "message": f"Hoàn thành! Đã xử lý {len(pages_data)} trang",
+                "progress": 100
+            })
+
             logger.info("OCR PDF completed for %s: %d pages, %d lines, avg_conf=%.2f, time=%dms",
                        image_id, len(pages_data), total_lines, avg_confidence, result['processing_time_ms'])
             

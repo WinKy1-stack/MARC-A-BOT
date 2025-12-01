@@ -36,14 +36,10 @@ export const useDropzone = ({
       }
     },
     onDragEnter: () => {
-      if (!disabled) {
-        console.log('Drag Enter');
-      }
+      // Drag enter handler
     },
     onDragLeave: () => {
-      if (!disabled) {
-        console.log('Drag Leave');
-      }
+      // Drag leave handler
     },
     style: {
       cursor: disabled ? 'not-allowed' : 'pointer',

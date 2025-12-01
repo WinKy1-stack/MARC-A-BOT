@@ -8,6 +8,8 @@ interface UseOCRState {
   progress: number;
   results: OCRResult[];
   error: string | null;
+  statusText?: string;
+  tip?: string;
 }
 
 export const useOCR = () => {
@@ -16,44 +18,59 @@ export const useOCR = () => {
     progress: 0,
     results: [],
     error: null,
+    statusText: '',
+    tip: '',
   });
 
   /**
    * Xử lý một file
    */
   const processFile = useCallback(async (file: File): Promise<OCRResult | null> => {
-    setState((prev) => ({ ...prev, isProcessing: true, error: null }));
+    setState((prev) => ({ ...prev, isProcessing: true, error: null, statusText: '' }));
 
     try {
       const result = await ocrService.processFile(file);
 
-      // Nếu bị queue
+      // Nếu bị queue -> nghe SSE để cập nhật tiến trình
       if (result.status === 'queued' && result.request_id) {
-        toast.loading(
-          `Đang chờ xử lý... Vị trí: ${result.queue_position}`,
-          { id: result.request_id }
-        );
+        setState((prev) => ({
+          ...prev,
+          statusText: `Đang chờ xử lý... Vị trí: ${result.queue_position}`,
+        }));
+        toast.loading(`Đang chờ xử lý... Vị trí: ${result.queue_position}`, {
+          id: result.request_id,
+        });
 
-        // Poll status
-        const finalResult = await ocrService.pollRequestStatus(
-          result.request_id,
-          () => {
-            toast.loading('Đang xử lý...', { id: result.request_id });
+        const finalResult = await ocrService.waitForQueuedResult(result.request_id, (info) => {
+          if (info.statusText || info.tip || info.progress !== undefined) {
+            setState((prev) => ({
+              ...prev,
+              statusText: info.statusText ?? prev.statusText,
+              tip: info.tip ?? prev.tip,
+              progress: info.progress ?? prev.progress,
+            }));
           }
-        );
+        });
 
         toast.dismiss(result.request_id);
 
-        if (finalResult.status === 'success') {
+        if (finalResult.status === 'success' || finalResult.status === 'completed') {
+          const normalized =
+            (finalResult as any).result && (finalResult as any).result.status
+              ? ((finalResult as any).result as OCRResult)
+              : finalResult;
+
           toast.success('Xử lý thành công!');
           setState((prev) => ({
             ...prev,
             isProcessing: false,
-            results: [...prev.results, finalResult],
+            statusText: '',
+            tip: '',
+            results: [...prev.results, normalized],
           }));
-          return finalResult;
+          return normalized;
         } else {
-          throw new Error(finalResult.message || 'OCR failed');
+          throw new Error((finalResult as any).message || 'OCR failed');
         }
       }
 
@@ -63,6 +80,8 @@ export const useOCR = () => {
         setState((prev) => ({
           ...prev,
           isProcessing: false,
+          statusText: '',
+          tip: '',
           results: [...prev.results, result],
         }));
         return result;
@@ -76,6 +95,8 @@ export const useOCR = () => {
         ...prev,
         isProcessing: false,
         error: errorMessage,
+        statusText: '',
+        tip: '',
       }));
       return null;
     }
@@ -90,6 +111,7 @@ export const useOCR = () => {
       isProcessing: true,
       error: null,
       progress: 0,
+      statusText: 'Đang xử lý batch...',
     }));
 
     try {
@@ -100,19 +122,18 @@ export const useOCR = () => {
       toast.dismiss(toastId);
 
       if (batchResult.status === 'success') {
-        const successCount = batchResult.results.filter(
-          (r) => r.status === 'success'
-        ).length;
+        const successCount = batchResult.results.filter((r) => r.status === 'success').length;
 
-        toast.success(
-          `Xử lý thành công ${successCount}/${batchResult.total_files} ảnh!`,
-          { duration: 4000 }
-        );
+        toast.success(`Xử lý thành công ${successCount}/${batchResult.total_files} ảnh!`, {
+          duration: 4000,
+        });
 
         setState((prev) => ({
           ...prev,
           isProcessing: false,
           progress: 100,
+          statusText: '',
+          tip: '',
           results: batchResult.results,
         }));
 
@@ -127,6 +148,8 @@ export const useOCR = () => {
         ...prev,
         isProcessing: false,
         error: errorMessage,
+        statusText: '',
+        tip: '',
       }));
       return [];
     }
@@ -154,6 +177,8 @@ export const useOCR = () => {
       progress: 0,
       results: [],
       error: null,
+      statusText: '',
+      tip: '',
     });
   }, []);
 
