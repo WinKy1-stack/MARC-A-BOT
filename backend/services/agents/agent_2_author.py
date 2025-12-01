@@ -4,7 +4,7 @@ Nhận diện và chuẩn hóa tác giả - MARC21 Field 100/700
 """
 import re
 import logging
-from typing import List
+from typing import List, Dict, Any
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -40,75 +40,102 @@ class AuthorExtractor:
         r'press',
     ]
     
-    def extract_authors(self, ocr_text: str) -> List[str]:
+    def extract_authors(self, ocr_text: str) -> Dict[str, Any]:
         """
-        Extract and normalize author names from OCR text
+        Trích xuất tác giả từ OCR text
         
         Args:
-            ocr_text: Raw OCR text
+            ocr_text: Raw OCR text (đã được clean)
             
         Returns:
-            List of normalized author names in format "Last, First"
+            Dict với format:
+            {
+                "main": <tác giả chính dạng 'Họ, Tên'> hoặc None,
+                "others": [<tác giả phụ dạng 'Họ, Tên'>, ...],
+                "confidence": <float 0-1>
+            }
             
         Rules:
-        - Find author near keywords "by", "Author", "Written by"
-        - Usually below title
-        - Handle multiple authors (separated by ";" or "&")
-        - Normalize: "John Doe" → "Doe, John"
-        - Handle middle name/initial
-        - Handle suffixes (Jr., Sr., Ph.D.)
-        - Exclude publishers, editors
-        - Validate: non-empty, at least 2 characters
+        - Tìm tác giả bằng keywords: 'by', 'author', 'written by', 'tác giả', 'biên soạn'
+        - Thường nằm 1-2 dòng dưới title
+        - Parse danh sách tác giả: tách bởi ';', '&', 'và'
+        - Chuẩn hóa format: "John Doe" → "Doe, John"
+        - Xử lý suffix: "John Doe Jr.", "Ph.D." (giữ ở phần sau tên)
+        - Loại bỏ các dòng liên quan nhà xuất bản, editor
         """
         if not ocr_text or not ocr_text.strip():
             logger.warning("Empty OCR text")
-            return []
+            return {
+                "main": None,
+                "others": [],
+                "confidence": 0.0
+            }
         
         lines = [line.strip() for line in ocr_text.split('\n') if line.strip()]
         
         authors = []
+        confidence = 0.85  # Confidence mặc định
+        found_via_keyword = False
         
-        # Strategy 1: Find lines with author keywords
+        # Chiến lược 1: Tìm dòng có keywords tác giả
         for i, line in enumerate(lines):
-            # Check for author keywords
+            # Kiểm tra keywords tác giả
             for keyword in self.AUTHOR_KEYWORDS:
                 if re.search(keyword, line, re.IGNORECASE):
-                    # Extract author from this line
+                    # Trích xuất tác giả từ dòng này
                     author_text = re.sub(keyword, '', line, flags=re.IGNORECASE).strip()
                     
-                    # Check if it's not a publisher/editor
+                    # Kiểm tra không phải publisher/editor
                     if not self._is_excluded(author_text):
                         extracted = self._parse_authors(author_text)
                         authors.extend(extracted)
+                        found_via_keyword = True
                     break
         
-        # Strategy 2: If no authors found, check lines after title
+        # Chiến lược 2: Nếu không tìm thấy, kiểm tra các dòng sau title
         if not authors:
-            # Assume title is in first 3 lines, author in next 3 lines
+            # Giả định title ở 3 dòng đầu, tác giả ở dòng tiếp theo
             for line in lines[1:6]:
-                # Skip if too short or looks like publisher
+                # Bỏ qua nếu quá ngắn hoặc giống publisher
                 if len(line) < 5 or self._is_excluded(line):
                     continue
                 
-                # Check if looks like a name (has capital letters)
+                # Kiểm tra có vẻ như tên người (có chữ in hoa)
                 if self._looks_like_name(line):
                     extracted = self._parse_authors(line)
                     authors.extend(extracted)
-                    if authors:  # Found at least one author
+                    if authors:  # Tìm thấy ít nhất 1 tác giả
+                        confidence = 0.7  # Confidence thấp hơn vì không có keyword
                         break
         
-        # Validate and normalize
+        # Validate và chuẩn hóa
         normalized = []
         for author in authors:
             norm = self._normalize_author(author)
             if self._validate_author(norm):
                 normalized.append(norm)
         
-        # Remove duplicates
+        # Loại bỏ duplicate
         normalized = list(dict.fromkeys(normalized))
         
-        logger.info(f"Extracted {len(normalized)} authors: {normalized}")
-        return normalized
+        # Xác định tác giả chính và tác giả phụ
+        main_author = normalized[0] if normalized else None
+        other_authors = normalized[1:] if len(normalized) > 1 else []
+        
+        # Điều chỉnh confidence dựa trên số lượng và cách tìm thấy
+        if not main_author:
+            confidence = 0.0
+        elif not found_via_keyword:
+            confidence = max(0.5, confidence - 0.15)
+        elif len(normalized) > 3:
+            confidence = min(0.95, confidence + 0.05)  # Nhiều tác giả = confidence cao hơn
+        
+        logger.info(f"Extracted {len(normalized)} authors: main={main_author}, others={other_authors} (confidence: {confidence:.2f})")
+        return {
+            "main": main_author,
+            "others": other_authors,
+            "confidence": round(confidence, 2)
+        }
     
     def _parse_authors(self, text: str) -> List[str]:
         """

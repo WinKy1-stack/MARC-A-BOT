@@ -16,13 +16,17 @@ Integration:
 from .agent_1_title import TitleExtractor
 from .agent_2_author import AuthorExtractor
 from .agent_3_isbn_year import ISBNYearExtractor
+from .agent_4_keywords import KeywordExtractor
 from .agent_5_doctype import DocumentTypeClassifier
 from .marc_integration import MARCIntegration
+from .ocr_preprocessing import clean_ocr_text
 
 __all__ = [
     'TitleExtractor',
     'AuthorExtractor',
     'ISBNYearExtractor',
+    'KeywordExtractor',
     'DocumentTypeClassifier',
     'MARCIntegration',
+    'clean_ocr_text',
 ]
