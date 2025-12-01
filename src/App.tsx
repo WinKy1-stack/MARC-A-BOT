@@ -9,7 +9,7 @@ import { ImagePreview } from './components/ImagePreview';
 
 const App: React.FC = () => {
   const { files, addFiles, removeFile, clearAll } = useFilePreview();
-  const { marcData, processImages, resetMARC } = useMARC();
+  const { marcData, ocrResults, processImages, resetMARC } = useMARC();
   const { previewIndex, openPreview, closePreview, nextImage, previousImage } =
     useImagePreview();
 
@@ -38,6 +38,7 @@ const App: React.FC = () => {
       <MainLayout
         files={files}
         marcData={marcData}
+        ocrResults={ocrResults}
         onDrop={handleDrop}
         onRemove={handleRemoveImage}
         onProcess={handleProcess}

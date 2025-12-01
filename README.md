@@ -1,145 +1,214 @@
 # MARC-A-BOT
 
-Ứng dụng web xử lý ảnh và dữ liệu MARC với giao diện hiện đại và backend API.
+Hệ thống OCR metadata extraction và authority control cho thư viện số - Tự động trích xuất metadata từ ảnh và chuẩn hóa theo MARC21.
 
-## 📋 Mô tả dự án
+## 🎯 Tính năng
 
-MARC-A-BOT là một ứng dụng full-stack cho phép người dùng:
-- Upload và xử lý ảnh
-- Xem trước ảnh với giao diện grid hiện đại
-- Xử lý dữ liệu MARC (Machine-Readable Cataloging)
-- Tương tác với API backend để xử lý dữ liệu
+- **5 OCR Agents**: Title, Author, ISBN/Year, Keywords, Document Type
+- **Authority Control**: MESH, LCSH, LCC, NLM integration với cache
+- **6 AI Tools**: Compatible với CrewAI, LangGraph, LangChain, Gemini
+- **MARC21 Standard**: Complete bibliographic records
+- **RESTful API**: 8 endpoints
+- **Modern UI**: React + TypeScript + TailwindCSS
 
-## 🛠️ Ngăn xếp công nghệ
+## 🏗️ Tech Stack
 
-### Frontend
-- **React 18** - Thư viện UI
-- **TypeScript** - Type-safe JavaScript
-- **Vite** - Build tool và dev server nhanh
-- **TailwindCSS** - Utility-first CSS framework
-- **React Hooks** - Quản lý state và side effects
+**Frontend:** React 18, TypeScript, Vite, TailwindCSS  
+**Backend:** Python 3.11, Flask 3.0, SQLite  
+**APIs:** MESH, LCSH, LCC, NLM (external authorities)
+
+## 📦 Cài đặt
 
 ### Backend
-- **Flask** - Python web framework
-- **Flask-CORS** - Cross-Origin Resource Sharing
-- **Python 3.x** - Ngôn ngữ lập trình backend
 
-### Dev Tools
-- **ESLint** - Code linting
-- **PostCSS** - CSS processing
-- **TypeScript Compiler** - Type checking
+```bash
+cd backend
+python -m venv venv
+venv\Scripts\activate  # Windows
+pip install -r requirements.txt
+python app.py  # → http://localhost:5000
+```
 
-## 📁 Cấu trúc dự án
+### Frontend
+
+```bash
+npm install
+npm run dev  # → http://localhost:5173
+```
+
+## 🚀 Sử dụng
+
+### 1. OCR Pipeline - Extract Metadata
+
+```python
+from backend.services.agents import MARCIntegration
+
+integration = MARCIntegration()
+marc_record = integration.agents_output_to_marc21(
+    ocr_text="""
+    Clinical Medicine Handbook
+    By Dr. John Smith
+    ISBN: 978-0-123-45678-9
+    © 2024
+    """,
+    keywords=['clinical medicine']
+)
+```
+
+### 2. AI Agent - Process Keywords
+
+```python
+from backend.services.agents.ai_agent_with_tools import KeywordProcessorAgent
+
+agent = KeywordProcessorAgent()
+result = agent.process_keywords(
+    keywords=['diabetes', 'insulin'],
+    subject_type='medical'
+)
+
+# Output: classification_framework (LCC/NLM) + controlled_keywords (MESH/LCSH)
+```
+
+### 3. Authority API - Map Keywords
+
+```bash
+curl -X POST http://localhost:5000/api/authority/classification-keywords \
+  -H "Content-Type: application/json" \
+  -d '{"keywords": ["diabetes"], "subject_type": "medical"}'
+```
+
+## 📡 API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/authority/search` | POST | Search authority terms |
+| `/api/authority/map` | POST | Map keywords + MARC |
+| `/api/authority/classification-keywords` | POST | Get frameworks + keywords |
+| `/api/authority/validate` | POST | Validate term |
+| `/api/authority/generate-marc` | POST | Generate MARC21 fields |
+| `/api/authority/health` | GET | Health check |
+| `/api/authority/cache/stats` | GET | Cache statistics |
+| `/api/authority/cache/clear` | POST | Clear cache |
+
+## 🤖 AI Framework Integration
+
+Compatible với CrewAI, LangGraph, LangChain, Gemini - Xem chi tiết tại:
+- **[AI Agent Guide](AI_AGENT_WITH_TOOLS.md)** - Hướng dẫn chi tiết
+- **[Quick Start](QUICK_START_AGENT.md)** - Setup nhanh
+
+```python
+# CrewAI Example
+from crewai import Agent
+agent = Agent(role='Cataloger', tools=keyword_agent.get_available_tools())
+
+# Gemini Example
+import google.generativeai as genai
+model.generate_content("Process keywords", tools=agent.get_available_tools())
+```
+
+## 🎯 5 OCR Agents
+
+| Agent | Input | Output | MARC |
+|-------|-------|--------|------|
+| Agent 1 | OCR text | Title | 245 |
+| Agent 2 | OCR text | Author(s) | 100, 700 |
+| Agent 3 | OCR text | ISBN + Year | 020, 260 |
+| Agent 4 | Keywords | MESH/LCSH terms | 050, 060, 650 |
+| Agent 5 | OCR text | Document type | Leader |
+
+**Agent 4** = `backend/services/authority/` (toàn bộ module)
+
+## 📁 Cấu trúc
 
 ```
 MARC-A-BOT/
-├── backend/              # Flask API server
-│   ├── app.py           # Main Flask application
-│   ├── requirements.txt # Python dependencies
-│   └── README.md        # Backend documentation
-│
-├── src/                 # Frontend source code
-│   ├── components/      # React components
-│   ├── hooks/          # Custom React hooks
-│   ├── types/          # TypeScript type definitions
-│   ├── constants/      # Constants and configs
-│   └── assets/         # Static assets
-│
-├── public/             # Public assets
-├── index.html          # HTML entry point
-├── package.json        # Node dependencies
-└── vite.config.ts      # Vite configuration
+├── backend/
+│   ├── services/
+│   │   ├── agents/                    # OCR agents
+│   │   │   ├── agent_1_title.py
+│   │   │   ├── agent_2_author.py
+│   │   │   ├── agent_3_isbn_year.py
+│   │   │   ├── agent_5_doctype.py
+│   │   │   ├── ai_agent_with_tools.py # 6 AI tools
+│   │   │   └── marc_integration.py    # Combine agents
+│   │   └── authority/                 # Agent 4 - Authority Control
+│   │       ├── clients/               # MESH, LOC, Z39.50
+│   │       ├── cache/                 # SQLite cache
+│   │       ├── mappers/               # Keyword mapping
+│   │       ├── tools.py               # 6 tools interface
+│   │       └── authority_service.py
+│   ├── api/authority_routes.py        # 8 endpoints
+│   ├── app.py                         # Flask app
+│   └── requirements.txt
+├── src/                               # React frontend
+│   ├── components/
+│   ├── hooks/
+│   └── types/
+├── AI_AGENT_WITH_TOOLS.md             # AI integration guide
+├── QUICK_START_AGENT.md               # Quick setup
+└── package.json
 ```
 
-## 🚀 Hướng dẫn cài đặt
+## 🔧 Dependencies
 
-### Prerequisites
-- Node.js (v18 trở lên)
-- Python 3.8 trở lên
-- npm hoặc yarn
+```
+# Backend
+Flask==3.0.0
+requests==2.31.0
+rapidfuzz==3.5.2
+pymarc==4.2.2
+pytest==7.4.3
 
-### Cài đặt Frontend
-
-1. Clone repository:
-```bash
-git clone https://github.com/LockMan04/MARC-A-BOT.git
-cd MARC-A-BOT
+# Frontend
+react@18
+typescript@5
+vite@5
 ```
 
-2. Cài đặt dependencies:
+## 🌟 Features
+
+✅ Complete OCR pipeline (5 agents)  
+✅ Authority control (MESH, LCSH, LCC, NLM)  
+✅ MARC21 compliant output  
+✅ SQLite cache with fuzzy matching  
+✅ 6 AI tools (CrewAI/LangGraph compatible)  
+✅ 8 RESTful API endpoints  
+✅ Production ready
+
+## 📚 Documentation
+
+- **[AI Agent with Tools](AI_AGENT_WITH_TOOLS.md)** - Framework integration guide
+- **[Quick Start Agent](QUICK_START_AGENT.md)** - Quick setup guide
+- **[Deployment Guide](backend/DEPLOYMENT_GUIDE.md)** - Production deployment
+- **[Architecture](backend/docs/ARCHITECTURE.md)** - System architecture
+
+## 🧪 Testing
+
 ```bash
-npm install
-```
-
-3. Chạy development server:
-```bash
-npm run dev
-```
-
-Frontend sẽ chạy tại: `http://localhost:5173`
-
-### Cài đặt Backend
-
-1. Di chuyển vào thư mục backend:
-```bash
+# Backend tests
 cd backend
+pytest tests/ -v
+
+# Test authority service
+python -m services.authority.tools
+
+# Test AI agent
+python services/agents/ai_agent_with_tools.py
 ```
 
-2. Tạo virtual environment:
-```bash
-python -m venv venv
-```
+## 📝 License
 
-3. Kích hoạt virtual environment:
-- Windows:
-```bash
-.\venv\Scripts\activate
-```
-- Linux/Mac:
-```bash
-source venv/bin/activate
-```
+MIT License
 
-4. Cài đặt dependencies:
-```bash
-pip install -r requirements.txt
-```
+## 👥 Contributors
 
-5. Chạy Flask server:
-```bash
-python app.py
-```
+LockMan04 - [@LockMan04](https://github.com/LockMan04)
 
-Backend sẽ chạy tại: `http://localhost:5000`
+## 🔗 Repository
 
-## 📝 Scripts
+**GitHub:** [LockMan04/MARC-A-BOT](https://github.com/LockMan04/MARC-A-BOT)  
+**Branch:** feature/lib-protocols-integration
 
-### Frontend
-```bash
-npm run dev          # Chạy development server
-npm run build        # Build production
-npm run preview      # Preview production build
-npm run lint         # Chạy ESLint
-```
+---
 
-### Backend
-```bash
-python app.py        # Chạy Flask server
-```
-
-## 🔌 API Endpoints
-
-- `GET /` - API home
-- `GET /api/health` - Health check
-- `POST /api/process` - Xử lý dữ liệu
-
-Chi tiết API xem tại [backend/README.md](backend/README.md)
-
-## 🎨 Features
-
-- ✅ Drag & drop upload ảnh
-- ✅ Preview ảnh với grid layout
-- ✅ Xử lý dữ liệu MARC
-- ✅ Toast notifications
-- ✅ Responsive design
-- ✅ RESTful API backend
+**Status:** ✅ Production Ready | **Version:** 1.0.0 | **Updated:** November 2024

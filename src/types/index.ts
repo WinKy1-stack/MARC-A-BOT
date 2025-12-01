@@ -3,6 +3,25 @@ export interface FilePreviewItem {
   preview: string;
   fileName: string;
   file: File;
+  ocrResult?: OCRResult;  // Store OCR result for each file
+}
+
+export interface OCRResult {
+  status: 'success' | 'error' | 'queued';
+  image_id?: string;
+  ocr_text?: string;
+  markdown?: string;
+  confidence?: number;
+  processing_time_ms?: number;
+  output_files?: {
+    json?: string;
+    markdown?: string;
+  };
+  layout_detected?: boolean;
+  error?: string;
+  request_id?: string;
+  queue_position?: number;
+  estimated_wait_time?: number;
 }
 
 export interface DropzoneRootProps {

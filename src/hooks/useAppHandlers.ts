@@ -7,7 +7,7 @@ interface UseAppHandlersProps {
   addFiles: (files: File[]) => void;
   removeFile: (id: string) => void;
   clearAll: () => void;
-  processImages: (fileCount: number) => void;
+  processImages: (files: FilePreviewItem[]) => Promise<number>;
   resetMARC: () => void;
 }
 
@@ -57,12 +57,24 @@ export const useAppHandlers = ({
     }
   }, [clearAll, resetMARC, files]);
 
-  const handleProcess = useCallback(() => {
-    const fileCount = processImages(files.length);
-    toast.success(`Đã xử lý thành công ${fileCount} ${fileCount === 1 ? 'ảnh' : 'ảnh'}!`, {
-      duration: 4000,
-    });
-  }, [processImages, files.length]);
+  const handleProcess = useCallback(async () => {
+    if (files.length === 0) {
+      toast.error('Chưa có ảnh nào để xử lý');
+      return;
+    }
+
+    try {
+      const fileCount = await processImages(files);
+      toast.success(
+        `Đã xử lý thành công ${fileCount} ${fileCount === 1 ? 'ảnh' : 'ảnh'}!`,
+        {
+          duration: 4000,
+        }
+      );
+    } catch {
+      toast.error('Có lỗi xảy ra khi xử lý ảnh');
+    }
+  }, [processImages, files]);
 
   const handleReset = useCallback(() => {
     resetMARC();
