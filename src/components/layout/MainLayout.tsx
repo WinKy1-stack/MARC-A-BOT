@@ -9,6 +9,9 @@ interface MainLayoutProps {
   files: FilePreviewItem[];
   marcData: string | null;
   ocrResults: Map<string, OCRResult>;
+  isProcessing?: boolean;
+  statusText?: string;
+  tip?: string;
   onDrop: (files: File[]) => void;
   onRemove: (id: string) => void;
   onProcess?: () => void;
@@ -21,6 +24,9 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
   files,
   marcData,
   ocrResults,
+  isProcessing = false,
+  statusText,
+  tip,
   onDrop,
   onRemove,
   onProcess,
@@ -52,6 +58,9 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
                 disabled={true}
                 hasMarcData={hasOcrResults}
                 onImageClick={onImageClick}
+                isProcessing={isProcessing}
+                statusText={statusText}
+                tip={tip}
               />
             </div>
             <div className="w-full sm:w-1/2 flex-shrink-0 h-full animate-in slide-in-from-right fade-in duration-500 delay-150">
@@ -75,6 +84,9 @@ export const MainLayout: React.FC<MainLayoutProps> = ({
               onProcess={onProcess}
               disabled={false}
               onImageClick={onImageClick}
+              isProcessing={isProcessing}
+              statusText={statusText}
+              tip={tip}
             />
           </div>
         )}

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useDropzone } from '../hooks/useDropzone';
 import { FILE_ACCEPT_CONFIG } from '../constants/fileConfig';
 import { ImageGrid } from './ui/ImageGrid';
@@ -15,6 +15,9 @@ interface DropzoneProps {
   disabled?: boolean;
   hasMarcData?: boolean;
   onImageClick?: (id: string) => void;
+  isProcessing?: boolean;
+  statusText?: string;
+  tip?: string;
 }
 
 export const Dropzone: React.FC<DropzoneProps> = ({
@@ -26,9 +29,10 @@ export const Dropzone: React.FC<DropzoneProps> = ({
   disabled = false,
   hasMarcData = false,
   onImageClick,
+  isProcessing = false,
+  statusText,
+  tip,
 }) => {
-  const [isProcessing, setIsProcessing] = useState(false);
-
   const { getRootProps, getInputProps, inputRef, isDragActive } = useDropzone({
     onDrop,
     accept: FILE_ACCEPT_CONFIG,
@@ -38,14 +42,7 @@ export const Dropzone: React.FC<DropzoneProps> = ({
 
   const handleProcess = async () => {
     if (!onProcess || isProcessing) return;
-
-    setIsProcessing(true);
-    try {
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-      onProcess();
-    } finally {
-      setIsProcessing(false);
-    }
+    onProcess();
   };
 
   const handleButtonClick = () => {
@@ -90,11 +87,19 @@ export const Dropzone: React.FC<DropzoneProps> = ({
       </div>
 
       {files.length > 0 && (onProcess || onReset) && (
-        <ProcessButton
-          isProcessing={isProcessing}
-          hasMarcData={hasMarcData}
-          onClick={handleButtonClick}
-        />
+        <div className="flex flex-col items-center gap-2">
+          <ProcessButton
+            isProcessing={isProcessing}
+            hasMarcData={hasMarcData}
+            onClick={handleButtonClick}
+          />
+          {(statusText || tip) && (
+            <div className="text-xs text-gray-600 text-center">
+              {statusText && <div>{statusText}</div>}
+              {tip && <div className="text-gray-500">💡 {tip}</div>}
+            </div>
+          )}
+        </div>
       )}
     </div>
   );

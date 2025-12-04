@@ -5,6 +5,7 @@ from typing import Dict, Optional, List, Any
 
 from app.config import Config
 from app.services.base_ocr_service import BaseOCRService
+from app.ultis.request_queue import queue_manager
 
 logger = logging.getLogger(__name__)
 
@@ -41,14 +42,37 @@ class ImageProcessor(BaseOCRService):
         }
 
         try:
+            # Report progress: Bắt đầu xử lý
+            queue_manager.update_request_progress(image_id, {
+                "step": "starting",
+                "message": "Bắt đầu xử lý ảnh...",
+                "progress": 5
+            })
+
             # Đảm bảo pipeline đã sẵn sàng
+            queue_manager.update_request_progress(image_id, {
+                "step": "loading_model",
+                "message": "Đang tải mô hình OCR...",
+                "progress": 15
+            })
             self._ensure_pipeline_ready()
 
             # Gọi inference (BaseOCRService đã wrap PaddleX / PaddleOCR)
+            queue_manager.update_request_progress(image_id, {
+                "step": "ocr_processing",
+                "message": "Đang nhận diện văn bản...",
+                "progress": 40
+            })
             logger.info("Processing %s with PaddleOCR/PaddleX...", file_path)
             ocr_results = self.ocr_inference(file_path)
 
             logger.debug("Raw ocr_results type: %s", type(ocr_results))
+
+            queue_manager.update_request_progress(image_id, {
+                "step": "parsing_results",
+                "message": "Đang xử lý kết quả OCR...",
+                "progress": 60
+            })
 
             if not ocr_results:
                 logger.warning("OCR returned None or empty result for %s", image_id)
@@ -221,6 +245,12 @@ class ImageProcessor(BaseOCRService):
                 return result
 
             # Lưu output ra JSON nếu bật
+            queue_manager.update_request_progress(image_id, {
+                "step": "saving_results",
+                "message": "Đang lưu kết quả...",
+                "progress": 85
+            })
+
             output_paths: Dict[str, str] = {}
             if Config.ENABLE_JSON_OUTPUT:
                 import json
@@ -258,6 +288,12 @@ class ImageProcessor(BaseOCRService):
 
             # Update last used time cho BaseOCRService (giữ pipeline warm)
             self._update_last_used()
+
+            queue_manager.update_request_progress(image_id, {
+                "step": "completed",
+                "message": "Hoàn thành!",
+                "progress": 100
+            })
 
             logger.info(
                 "OCR completed for %s: confidence=%.2f, time=%dms",

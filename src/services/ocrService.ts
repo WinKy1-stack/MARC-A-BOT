@@ -3,6 +3,7 @@
  */
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api/ocr';
+const SSE_BASE_URL = API_BASE_URL; // SSE chung prefix /stream
 
 export interface OCRResult {
   status: 'success' | 'error' | 'queued';
@@ -88,30 +89,14 @@ class OCRService {
       throw new Error('Invalid file type');
     }
 
-    console.log('OCR Service: Processing file', {
-      name: file.name,
-      type: file.type,
-      size: file.size,
-    });
-
     const formData = new FormData();
     formData.append('file', file);
 
-    // Log FormData contents
-    console.log('OCR Service: FormData contents');
-    for (const [key, value] of formData.entries()) {
-      console.log(`  ${key}:`, value);
-    }
-
     try {
-      console.log('OCR Service: Sending request to', this.baseUrl);
-      
       const response = await fetch(`${this.baseUrl}`, {
         method: 'POST',
         body: formData,
       });
-
-      console.log('OCR Service: Response status', response.status);
 
       if (!response.ok) {
         const errorData = await response.json();
@@ -120,7 +105,6 @@ class OCRService {
       }
 
       const result: OCRResult = await response.json();
-      console.log('OCR Service: Success', result);
       return result;
     } catch (error) {
       console.error('Error processing file:', error);
@@ -212,6 +196,117 @@ class OCRService {
       console.error('Error downloading result:', error);
       throw error;
     }
+  }
+
+  /**
+   * Lang nghe SSE trang thai request. Tra ve ham close.
+   */
+  subscribeRequestStatus(
+    requestId: string,
+    onMessage: (event: MessageEvent) => void,
+    onError?: (event: Event) => void
+  ): () => void {
+    const source = new EventSource(`${SSE_BASE_URL}/stream/${requestId}`);
+    source.onmessage = onMessage;
+    source.onerror = (e) => {
+      onError?.(e);
+      source.close();
+    };
+    return () => source.close();
+  }
+
+  /**
+   * Cho den khi request queued hoan tat bang SSE.
+   */
+  async waitForQueuedResult(
+    requestId: string,
+    onUpdate?: (info: { statusText?: string; progress?: number; tip?: string }) => void
+  ): Promise<OCRResult> {
+    return new Promise((resolve, reject) => {
+      const source = new EventSource(`${SSE_BASE_URL}/stream/${requestId}`);
+
+      const cleanup = () => source.close();
+
+      const parsePayload = (event: MessageEvent) => {
+        try {
+          const payload = JSON.parse(event.data);
+          const result = payload?.result ?? payload;
+          return result as OCRResult;
+        } catch (err) {
+          reject(err);
+          return null;
+        }
+      };
+
+      source.addEventListener('update', (event) => {
+        try {
+          const payload = JSON.parse((event as MessageEvent).data);
+
+          // Priority 1: Detailed progress info from OCR processing
+          if (payload?.progress_info && onUpdate) {
+            const { message, progress, current_page, total_pages } = payload.progress_info;
+
+            let statusMessage = message || 'Đang xử lý...';
+
+            // Add page info for PDF processing
+            if (current_page && total_pages) {
+              statusMessage = `${message} (${current_page}/${total_pages})`;
+            }
+
+            onUpdate({
+              statusText: statusMessage,
+              progress: progress || undefined,
+            });
+          }
+          // Priority 2: Queue info (fallback)
+          else if (payload?.queue && onUpdate) {
+            const { queue_size, active_requests } = payload.queue;
+            onUpdate({
+              statusText: `Hàng chờ: ${queue_size} | Đang xử lý: ${active_requests}`,
+            });
+          }
+        } catch (err) {
+          console.error('SSE update parse error', err);
+        }
+      });
+
+      source.addEventListener('tip', (event) => {
+        if (onUpdate) {
+          try {
+            const payload = JSON.parse((event as MessageEvent).data);
+            if (payload?.message) {
+              onUpdate({ tip: payload.message });
+            }
+          } catch {
+            // ignore
+          }
+        }
+      });
+
+      source.addEventListener('completed', (event) => {
+        cleanup();
+        const parsed = parsePayload(event as MessageEvent);
+        if (parsed) resolve(parsed);
+      });
+
+      source.addEventListener('error', (event) => {
+        cleanup();
+        const msgEvent = event as MessageEvent;
+        if (msgEvent.data) {
+          try {
+            const payload = JSON.parse(msgEvent.data);
+            if (onUpdate && payload?.message) {
+              onUpdate({ statusText: payload.message });
+            }
+            reject(new Error(payload?.message || 'SSE error'));
+          } catch (err) {
+            reject(err);
+          }
+        } else {
+          reject(new Error('SSE connection error'));
+        }
+      });
+    });
   }
 
   /**

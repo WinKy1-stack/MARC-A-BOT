@@ -6,7 +6,7 @@ import type { FilePreviewItem } from '../types';
 export const useMARC = () => {
   const [marcData, setMarcData] = useState<string | null>(null);
   const [ocrResults, setOcrResults] = useState<Map<string, OCRResult>>(new Map());
-  const { processFile, isProcessing } = useOCR();
+  const { processFile, isProcessing, statusText, tip, progress } = useOCR();
 
   const processImages = useCallback(
     async (files: FilePreviewItem[]) => {
@@ -48,6 +48,8 @@ export const useMARC = () => {
     processImages,
     resetMARC,
     isProcessing,
+    statusText,
+    tip,
+    progress,
   };
 };
-
