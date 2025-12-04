@@ -1,5 +1,9 @@
 import os
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 class Config:
     # Đường dẫn cơ sở
@@ -40,6 +44,10 @@ class Config:
     
     # Ngưỡng độ tin cậy
     MIN_CONFIDENCE = 0.5
+    
+    # Gemini AI Configuration (cho Agents)
+    GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '')
+    GEMINI_MODEL = os.getenv('GEMINI_MODEL', 'gemini-1.5-pro')
     
     @staticmethod
     def init_app():

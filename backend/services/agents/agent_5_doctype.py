@@ -55,84 +55,111 @@ class DocumentTypeClassifier:
         }
     }
     
-    def classify_document_type(self, ocr_text: str, metadata: Dict[str, Any] = None) -> str:
+    def classify_document_type(self, ocr_text: str, metadata: Dict[str, Any] = None) -> Dict[str, Any]:
         """
-        Classify document type from OCR text and metadata
+        Phân loại loại tài liệu từ OCR text và metadata
         
         Args:
-            ocr_text: Raw OCR text
-            metadata: Optional metadata (e.g., {'has_isbn': True, 'has_chapters': True})
+            ocr_text: Raw OCR text (đã được clean)
+            metadata: Optional metadata (có thể chứa: isbn, title, authors, ...)
             
         Returns:
-            Document type: 'book', 'journal', 'magazine', 'textbook', 'proceeding', 'thesis', 'report'
-            
+            Dict với format:
+            {
+                "type": "book" | "journal" | "magazine" | "proceeding" | ...,
+                "leader_6_7": "am" | ...,
+                "confidence": <float 0-1>
+            }
+        
         Rules:
-        - Check keyword indicators (ISBN → book, Vol. → journal)
-        - Check format/layout patterns
-        - Use metadata if available
-        - Default fallback: 'book'
+        - Nếu có ISBN, chương, layout giống sách → "book" → leader_6_7 = "am"
+        - Nếu có Vol., No., Issue, "Journal of…" → "journal"
+        - Nếu có "Proceedings of", tên hội nghị → "proceeding"
+        - Nếu không chắc → fallback "book" nhưng confidence thấp
         """
         if not ocr_text or not ocr_text.strip():
             logger.warning("Empty OCR text, defaulting to 'book'")
-            return 'book'
+            return {
+                "type": "book",
+                "leader_6_7": "am",
+                "confidence": 0.5
+            }
         
-        # Calculate scores for each type
+        # Tính điểm cho mỗi loại
         scores = {}
         text_lower = ocr_text.lower()
         
         for doc_type, indicators in self.TYPE_INDICATORS.items():
             score = 0
             
-            # Check keywords
+            # Kiểm tra keywords
             for keyword in indicators['keywords']:
                 if keyword in text_lower:
                     score += 1
             
-            # Check patterns
+            # Kiểm tra patterns
             for pattern in indicators['patterns']:
                 matches = re.findall(pattern, text_lower)
                 score += len(matches)
             
-            # Apply weight
+            # Áp dụng weight
             scores[doc_type] = score * indicators['weight']
         
-        # Check metadata
+        # Kiểm tra metadata
         if metadata:
-            if metadata.get('has_isbn'):
+            if metadata.get('has_isbn') or metadata.get('isbn'):
                 scores['book'] = scores.get('book', 0) + 2
                 scores['textbook'] = scores.get('textbook', 0) + 1
             
-            if metadata.get('has_issn'):
+            if metadata.get('has_issn') or metadata.get('issn'):
                 scores['journal'] = scores.get('journal', 0) + 3
                 scores['magazine'] = scores.get('magazine', 0) + 2
             
-            if metadata.get('has_chapters'):
+            if metadata.get('has_chapters') or 'chapter' in text_lower:
                 scores['book'] = scores.get('book', 0) + 1
                 scores['textbook'] = scores.get('textbook', 0) + 2
             
-            if metadata.get('has_exercises'):
+            if metadata.get('has_exercises') or 'exercise' in text_lower:
                 scores['textbook'] = scores.get('textbook', 0) + 3
             
-            if metadata.get('has_volume_issue'):
+            if metadata.get('has_volume_issue') or 'vol.' in text_lower or 'issue' in text_lower:
                 scores['journal'] = scores.get('journal', 0) + 3
         
-        # Get type with highest score
+        # Lấy loại có điểm cao nhất
         if scores:
             result = max(scores.items(), key=lambda x: x[1])
             doc_type = result[0]
-            confidence = result[1]
+            raw_confidence = result[1]
             
-            # If confidence is too low, default to book
-            if confidence < 1.0:
-                logger.info(f"Low confidence ({confidence}), defaulting to 'book'")
-                return 'book'
+            # Chuẩn hóa confidence về 0-1
+            # Giả sử confidence tốt nhất là 5.0 (có thể điều chỉnh)
+            confidence = min(0.95, raw_confidence / 5.0) if raw_confidence > 0 else 0.5
             
-            logger.info(f"Classified as '{doc_type}' with confidence {confidence}")
-            return doc_type
+            # Nếu confidence quá thấp, fallback về book
+            if confidence < 0.5:
+                logger.info(f"Low confidence ({confidence:.2f}), defaulting to 'book'")
+                doc_type = 'book'
+                confidence = 0.5
+            
+            # Lấy leader code
+            leader_6 = self.get_marc_leader_code(doc_type)
+            leader_6_7 = leader_6 + 'm'  # 'm' = monograph (đơn tài liệu)
+            
+            logger.info(f"Classified as '{doc_type}' with confidence {confidence:.2f}, leader_6_7={leader_6_7}")
+            
+            return {
+                "type": doc_type,
+                "leader_6_7": leader_6_7,
+                "confidence": round(confidence, 2)
+            }
         else:
             # Default
             logger.info("No indicators found, defaulting to 'book'")
-            return 'book'
+            return {
+                "type": "book",
+                "leader_6_7": "am",
+                "confidence": 0.5
+            }
     
     def classify_with_details(self, ocr_text: str, metadata: Dict[str, Any] = None) -> Dict[str, Any]:
         """

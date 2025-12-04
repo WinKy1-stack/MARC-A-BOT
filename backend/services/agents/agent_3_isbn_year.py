@@ -4,7 +4,7 @@ Extract ISBN và năm xuất bản - MARC21 Fields 020 & 260
 """
 import re
 import logging
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict, Any, List
 from datetime import datetime
 
 logging.basicConfig(level=logging.INFO)
@@ -17,104 +17,153 @@ class ISBNYearExtractor:
     MARC21 Fields: 020 (ISBN), 260 (Publication info)
     """
     
-    def extract_isbn(self, ocr_text: str) -> Optional[str]:
+    def extract_isbn(self, ocr_text: str) -> Dict[str, Any]:
         """
-        Extract and validate ISBN from OCR text
+        Trích xuất ISBN từ OCR text
         
         Args:
-            ocr_text: Raw OCR text
+            ocr_text: Raw OCR text (đã được clean)
             
         Returns:
-            Normalized ISBN-13 string (format: 978-X-XXX-XXXXX-X) or None
+            Dict với format:
+            {
+                "primary": <isbn 13 ký tự hoặc 10 ký tự> hoặc None,
+                "all": [<danh sách isbn tìm được>],
+                "confidence": <float 0-1>
+            }
             
         Rules:
-        - Find ISBN pattern (10 or 13 digits)
-        - Validate check digit
-        - Handle hyphen/space formatting
-        - Remove duplicates
-        - Prefer ISBN-13 over ISBN-10
-        - Convert ISBN-10 to ISBN-13 if needed
+        - Tìm pattern ISBN (10 hoặc 13 ký tự) gồm số + X/x + - hoặc space
+        - Chuẩn hóa: bỏ dấu - và space
+        - Ưu tiên 13-digit (prefix 978/979)
+        - Kiểm tra check digit ISBN-10 & ISBN-13
+        - Loại bỏ duplicate
         """
         if not ocr_text:
-            return None
+            return {
+                "primary": None,
+                "all": [],
+                "confidence": 0.0
+            }
         
-        # Find all potential ISBNs
+        # Tìm tất cả các ISBN tiềm năng
         isbns = self._find_isbn_patterns(ocr_text)
         
         if not isbns:
             logger.warning("No ISBN found")
-            return None
+            return {
+                "primary": None,
+                "all": [],
+                "confidence": 0.0
+            }
         
-        # Validate and prefer ISBN-13
+        # Validate và chuẩn hóa
         valid_isbns = []
         for isbn in isbns:
             normalized = self._normalize_isbn(isbn)
             if self._validate_isbn(normalized):
-                valid_isbns.append(normalized)
+                # Chuẩn hóa lại (bỏ dấu -)
+                clean_isbn = re.sub(r'[-\s]', '', normalized)
+                if clean_isbn not in valid_isbns:
+                    valid_isbns.append(clean_isbn)
         
         if not valid_isbns:
             logger.warning("No valid ISBN found")
-            return None
+            return {
+                "primary": None,
+                "all": [],
+                "confidence": 0.0
+            }
         
-        # Prefer ISBN-13
-        isbn_13 = [isbn for isbn in valid_isbns if len(isbn.replace('-', '')) == 13]
-        result = isbn_13[0] if isbn_13 else valid_isbns[0]
+        # Ưu tiên ISBN-13
+        isbn_13_list = [isbn for isbn in valid_isbns if len(isbn) == 13]
+        primary_isbn = isbn_13_list[0] if isbn_13_list else valid_isbns[0]
         
-        # Format with hyphens
-        result = self._format_isbn(result)
+        # Confidence dựa trên số lượng ISBN hợp lệ và độ dài
+        confidence = 0.98 if len(valid_isbns) > 0 else 0.0
+        if len(isbn_13_list) > 0:
+            confidence = 0.98  # ISBN-13 có confidence cao
+        elif len(valid_isbns) > 1:
+            confidence = 0.95  # Nhiều ISBN hợp lệ
         
-        logger.info(f"Extracted ISBN: {result}")
-        return result
+        logger.info(f"Extracted ISBN: primary={primary_isbn}, all={valid_isbns} (confidence: {confidence:.2f})")
+        return {
+            "primary": primary_isbn,
+            "all": valid_isbns,
+            "confidence": round(confidence, 2)
+        }
     
-    def extract_pub_year(self, ocr_text: str) -> Optional[int]:
+    def extract_pub_year(self, ocr_text: str) -> Dict[str, Any]:
         """
-        Extract publication year from OCR text
+        Trích xuất năm xuất bản từ OCR text
         
         Args:
-            ocr_text: Raw OCR text
+            ocr_text: Raw OCR text (đã được clean)
             
         Returns:
-            Publication year (YYYY format) or None
+            Dict với format:
+            {
+                "value": <năm dạng int hoặc None>,
+                "confidence": <float 0-1>
+            }
             
         Rules:
-        - Find year near "©", "Copyright", "Published"
-        - Pattern: 4 digit number (1000-2100)
-        - Handle multiple dates (prefer copyright year)
-        - Validate range
+        - Tìm các đoạn chứa: ©, Copyright, First edition, First printing, Published
+        - Từ đó trích năm có pattern \\b(19|20)\\d{2}\\b
+        - Nếu nhiều năm: ưu tiên năm gần cụm ©, Copyright
         """
         if not ocr_text:
-            return None
+            return {
+                "value": None,
+                "confidence": 0.0
+            }
         
-        # Find years near keywords
+        # Tìm các năm gần keywords
         years = self._find_year_patterns(ocr_text)
         
         if not years:
             logger.warning("No publication year found")
-            return None
+            return {
+                "value": None,
+                "confidence": 0.0
+            }
         
-        # Validate and filter
+        # Validate và lọc
         valid_years = [y for y in years if self._validate_year(y)]
         
         if not valid_years:
             logger.warning("No valid year found")
-            return None
+            return {
+                "value": None,
+                "confidence": 0.0
+            }
         
-        # Prefer most recent year (likely copyright year)
-        result = max(valid_years)
+        # Ưu tiên năm gần nhất (thường là copyright year)
+        result_year = max(valid_years)
         
-        logger.info(f"Extracted publication year: {result}")
-        return result
+        # Confidence dựa trên số lượng năm hợp lệ và cách tìm thấy
+        confidence = 0.96 if len(valid_years) > 0 else 0.0
+        if len(valid_years) > 1:
+            confidence = 0.96  # Nhiều năm hợp lệ
+        elif '©' in ocr_text or 'copyright' in ocr_text.lower():
+            confidence = 0.98  # Có ký hiệu copyright
+        
+        logger.info(f"Extracted publication year: {result_year} (confidence: {confidence:.2f})")
+        return {
+            "value": result_year,
+            "confidence": round(confidence, 2)
+        }
     
-    def extract_both(self, ocr_text: str) -> Tuple[Optional[str], Optional[int]]:
+    def extract_both(self, ocr_text: str) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         """
-        Extract both ISBN and year
+        Trích xuất cả ISBN và năm xuất bản
         
         Returns:
-            (isbn, year) tuple
+            Tuple (isbn_dict, year_dict)
         """
-        isbn = self.extract_isbn(ocr_text)
-        year = self.extract_pub_year(ocr_text)
-        return isbn, year
+        isbn_dict = self.extract_isbn(ocr_text)
+        year_dict = self.extract_pub_year(ocr_text)
+        return isbn_dict, year_dict
     
     def _find_isbn_patterns(self, text: str) -> list:
         """
