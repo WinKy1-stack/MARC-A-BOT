@@ -30,67 +30,92 @@ class TitleExtractor:
     # Subtitle separators
     SUBTITLE_SEPARATORS = [':', '—', '–', '-']
     
-    def extract_title(self, ocr_text: str) -> str:
+    def extract_title(self, ocr_text: str) -> dict:
         """
-        Extract and normalize book title from OCR text
+        Trích xuất tiêu đề sách từ OCR text
         
         Args:
-            ocr_text: Raw OCR text from document
+            ocr_text: Raw OCR text từ document (đã được clean)
             
         Returns:
-            Normalized title string
+            Dict với format:
+            {
+                "value": <tiêu đề sách dạng string>,
+                "confidence": <float 0-1>
+            }
             
         Rules:
-        - Find title at first lines or after library logo
-        - Remove subtitle/description (after ":" or "-")
-        - Handle ALL CAPS titles
-        - Handle special characters (apostrophes, quotes)
-        - Handle numbers and roman numerals (Vol. I, Part 2)
-        - Validate: 5 < length < 500
+        - Tìm tiêu đề ở dòng đầu tiên hoặc dòng lớn/cô đọng nhất
+        - Loại bỏ subtitle nếu có (sau ":" hoặc "-")
+        - Xử lý tiêu đề IN HOA TOÀN BỘ → chuyển về Title Case
+        - Giữ số hoặc số La Mã (Vol. I, Part 2)
+        - Validate: độ dài > 5 ký tự, < 500 ký tự
         """
         if not ocr_text or not ocr_text.strip():
             logger.warning("Empty OCR text")
-            return ""
+            return {
+                "value": "",
+                "confidence": 0.0
+            }
         
-        # Split into lines
+        # Split vào các dòng
         lines = [line.strip() for line in ocr_text.split('\n') if line.strip()]
         
         if not lines:
-            return ""
+            return {
+                "value": "",
+                "confidence": 0.0
+            }
         
-        # Find title (skip library headers)
+        # Tìm tiêu đề (bỏ qua headers thư viện)
         title_line = None
-        for i, line in enumerate(lines[:10]):  # Check first 10 lines
-            # Skip library logos/headers
+        confidence = 0.9  # Confidence mặc định
+        
+        for i, line in enumerate(lines[:10]):  # Kiểm tra 10 dòng đầu
+            # Bỏ qua logo/header thư viện
             if any(re.search(pattern, line.lower()) for pattern in self.SKIP_PATTERNS):
                 continue
             
-            # Skip very short lines (likely not title)
+            # Bỏ qua dòng quá ngắn (không phải tiêu đề)
             if len(line) < 5:
                 continue
             
-            # Skip lines with only numbers or special chars
+            # Bỏ qua dòng chỉ có số hoặc ký tự đặc biệt
             if re.match(r'^[\d\W]+$', line):
                 continue
             
-            # This is likely the title
+            # Đây có thể là tiêu đề
             title_line = line
+            # Confidence giảm dần nếu ở dòng sau
+            if i > 0:
+                confidence = max(0.7, 0.9 - (i * 0.05))
             break
         
         if not title_line:
-            # Fallback: use first non-empty line
+            # Fallback: dùng dòng đầu tiên không rỗng
             title_line = lines[0] if lines else ""
+            confidence = 0.5  # Confidence thấp vì không chắc chắn
         
-        # Normalize title
+        # Chuẩn hóa tiêu đề
         title = self._normalize_title(title_line)
         
-        # Validate
+        # Validate và điều chỉnh confidence
         if not self._validate_title(title):
             logger.warning(f"Invalid title: {title}")
-            return ""
+            return {
+                "value": "",
+                "confidence": 0.0
+            }
         
-        logger.info(f"Extracted title: {title}")
-        return title
+        # Giảm confidence nếu độ dài không hợp lý
+        if len(title) < 10 or len(title) > 200:
+            confidence *= 0.8
+        
+        logger.info(f"Extracted title: {title} (confidence: {confidence:.2f})")
+        return {
+            "value": title,
+            "confidence": round(confidence, 2)
+        }
     
     def _normalize_title(self, title: str) -> str:
         """

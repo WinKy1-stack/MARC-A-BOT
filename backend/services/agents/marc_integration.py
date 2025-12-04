@@ -16,13 +16,17 @@ try:
     from .agent_1_title import TitleExtractor
     from .agent_2_author import AuthorExtractor
     from .agent_3_isbn_year import ISBNYearExtractor
+    from .agent_4_keywords import KeywordExtractor
     from .agent_5_doctype import DocumentTypeClassifier
+    from .ocr_preprocessing import clean_ocr_text
 except ImportError:
     # Fallback for direct execution
     from agent_1_title import TitleExtractor
     from agent_2_author import AuthorExtractor
     from agent_3_isbn_year import ISBNYearExtractor
+    from agent_4_keywords import KeywordExtractor
     from agent_5_doctype import DocumentTypeClassifier
+    from ocr_preprocessing import clean_ocr_text
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -37,58 +41,269 @@ class MARCIntegration:
         self.title_extractor = TitleExtractor()
         self.author_extractor = AuthorExtractor()
         self.isbn_year_extractor = ISBNYearExtractor()
+        self.keyword_extractor = KeywordExtractor()
         self.doctype_classifier = DocumentTypeClassifier()
     
-    def agents_output_to_marc21(
-        self, 
-        ocr_text: str,
-        keywords: List[str] = None,
-        classification_frameworks: List[Dict[str, str]] = None
-    ) -> Dict[str, Any]:
+    def run_all_agents(self, ocr_json: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Main integration function: Combine all agents into MARC21
+        Chạy tất cả 5 agents từ OCR JSON và trả về dict output
         
         Args:
-            ocr_text: Raw OCR text from document
-            keywords: Controlled keywords from Agent 4 (optional, will use authority service)
-            classification_frameworks: Classification numbers from Agent 4 (optional)
-            
+            ocr_json: Dict từ OCR service, có thể có:
+                     - 'text' hoặc 'ocr_text': str
+                     - 'confidence': float
+                     - các field khác
+                     
         Returns:
-            MARC21 record dict with all fields:
+            Dict output từ tất cả agents, format:
             {
-                'leader': str,
-                'control_fields': {
-                    '001': str,  # Control number
-                    '003': str,  # Control number identifier
-                    '005': str,  # Date and time of latest transaction
-                    '008': str,  # Fixed-length data elements
-                },
-                'data_fields': {
-                    '020': [],  # ISBN
-                    '050': [],  # LCC classification
-                    '060': [],  # NLM classification
-                    '100': [],  # Main author
-                    '245': [],  # Title
-                    '260': [],  # Publication info
-                    '650': [],  # Subject headings
-                    '700': [],  # Additional authors
-                }
+                "title": {"value": "...", "confidence": 0.9},
+                "authors": {"main": "...", "others": [], "confidence": 0.85},
+                "isbn": {"primary": "...", "all": [...], "confidence": 0.98},
+                "pub_year": {"value": 2024, "confidence": 0.96},
+                "keywords": [...],
+                "subjects": [...],
+                "classification": {...},
+                "doc_type": {"type": "book", "leader_6_7": "am", "confidence": 0.9}
             }
         """
-        logger.info("Starting MARC21 integration...")
+        logger.info("Chạy tất cả 5 agents...")
         
-        # Extract data from all agents
-        agents_data = self._extract_all_agents(ocr_text)
+        # Tiền xử lý OCR text
+        ocr_text = clean_ocr_text(ocr_json)
         
-        # Build MARC21 record
-        marc_record = {
-            'leader': self._build_leader(agents_data),
-            'control_fields': self._build_control_fields(agents_data),
-            'data_fields': self._build_data_fields(agents_data, keywords, classification_frameworks)
+        if not ocr_text:
+            logger.warning("OCR text rỗng sau khi clean")
+            return {}
+        
+        # Agent 1: Title
+        title_result = self.title_extractor.extract_title(ocr_text)
+        
+        # Agent 2: Authors
+        authors_result = self.author_extractor.extract_authors(ocr_text)
+        
+        # Agent 3: ISBN & Year
+        isbn_result = self.isbn_year_extractor.extract_isbn(ocr_text)
+        pub_year_result = self.isbn_year_extractor.extract_pub_year(ocr_text)
+        
+        # Agent 4: Keywords & Subjects
+        keywords_list = self.keyword_extractor.extract_keywords(ocr_text, title_result.get("value"))
+        
+        # Xác định subject_type dựa trên keywords và metadata
+        subject_type = 'general'
+        if any('medical' in kw['keyword'].lower() or 'medicine' in kw['keyword'].lower() 
+               for kw in keywords_list[:5]):
+            subject_type = 'medical'
+        
+        mapping_result = self.keyword_extractor.map_keyword_to_authorities(keywords_list, subject_type)
+        
+        # Agent 5: Document Type
+        metadata = {
+            'has_isbn': isbn_result.get("primary") is not None,
+            'isbn': isbn_result.get("primary"),
+            'has_chapters': 'chapter' in ocr_text.lower(),
+            'has_exercises': 'exercise' in ocr_text.lower(),
+            'has_volume_issue': 'vol.' in ocr_text.lower() or 'issue' in ocr_text.lower(),
+        }
+        doc_type_result = self.doctype_classifier.classify_document_type(ocr_text, metadata)
+        
+        # Tổng hợp kết quả
+        agents_output = {
+            "title": title_result,
+            "authors": authors_result,
+            "isbn": isbn_result,
+            "pub_year": pub_year_result,
+            "keywords": keywords_list,
+            "subjects": mapping_result.get("subjects", []),
+            "classification": mapping_result.get("classification", {}),
+            "doc_type": doc_type_result
         }
         
-        logger.info("MARC21 integration completed")
-        return marc_record
+        logger.info("Hoàn thành chạy tất cả agents")
+        return agents_output
+    
+    def process_ocr_to_marc21(self, ocr_json: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Pipeline đầy đủ: OCR JSON → Agents → MARC21
+        
+        Args:
+            ocr_json: Dict từ OCR service
+            
+        Returns:
+            MARC21 JSON format
+        """
+        # Chạy tất cả agents
+        agents_output = self.run_all_agents(ocr_json)
+        
+        # Tạo MARC21
+        marc21 = self.agents_output_to_marc21(agents_output)
+        
+        return marc21
+    
+    def agents_output_to_marc21(self, agents_output: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Dùng output từ 5 agent để tạo cấu trúc MARC21 dạng JSON
+        
+        Args:
+            agents_output: Dict chứa output từ tất cả agents, format:
+            {
+                "title": {"value": "...", "confidence": 0.9},
+                "authors": {"main": "Trần, Xuân Nhĩ", "others": [], "confidence": 0.85},
+                "isbn": {"primary": "9786048083328", "all": ["9786048083328"], "confidence": 0.98},
+                "pub_year": {"value": 2024, "confidence": 0.96},
+                "keywords": [...],
+                "subjects": [...],
+                "classification": {...},
+                "doc_type": {"type": "book", "leader_6_7": "am", "confidence": 0.9}
+            }
+            
+        Returns:
+            MARC21 JSON format:
+            {
+                "leader": "00000nam a2200000 a 4500",
+                "fields": [
+                    {
+                        "tag": "020",
+                        "ind1": " ",
+                        "ind2": " ",
+                        "subfields": [{"code": "a", "value": "9786048083328"}]
+                    },
+                    ...
+                ]
+            }
+        """
+        logger.info("Bắt đầu tạo MARC21 từ agents_output...")
+        
+        fields = []
+        
+        # Build leader
+        leader_6_7 = agents_output.get("doc_type", {}).get("leader_6_7", "am")
+        leader = self._build_leader_from_type(leader_6_7)
+        
+        # 020: ISBN
+        isbn_data = agents_output.get("isbn", {})
+        if isbn_data.get("primary"):
+            fields.append({
+                "tag": "020",
+                "ind1": " ",
+                "ind2": " ",
+                "subfields": [
+                    {"code": "a", "value": isbn_data["primary"]}
+                ]
+            })
+        
+        # 100: Main Author
+        authors_data = agents_output.get("authors", {})
+        if authors_data.get("main"):
+            fields.append({
+                "tag": "100",
+                "ind1": "1",
+                "ind2": " ",
+                "subfields": [
+                    {"code": "a", "value": authors_data["main"]}
+                ]
+            })
+        
+        # 700: Additional Authors
+        if authors_data.get("others"):
+            for author in authors_data["others"]:
+                fields.append({
+                    "tag": "700",
+                    "ind1": "1",
+                    "ind2": " ",
+                    "subfields": [
+                        {"code": "a", "value": author}
+                    ]
+                })
+        
+        # 245: Title
+        title_data = agents_output.get("title", {})
+        if title_data.get("value"):
+            title_field = {
+                "tag": "245",
+                "ind1": "1" if authors_data.get("main") else "0",
+                "ind2": "0",
+                "subfields": [
+                    {"code": "a", "value": title_data["value"]}
+                ]
+            }
+            fields.append(title_field)
+        
+        # 260/264: Publication Year
+        pub_year_data = agents_output.get("pub_year", {})
+        if pub_year_data.get("value"):
+            fields.append({
+                "tag": "260",
+                "ind1": " ",
+                "ind2": " ",
+                "subfields": [
+                    {"code": "c", "value": str(pub_year_data["value"])}
+                ]
+            })
+        
+        # 050: LCC Classification
+        classification = agents_output.get("classification", {})
+        if classification.get("lcc"):
+            fields.append({
+                "tag": "050",
+                "ind1": "0",
+                "ind2": "0",
+                "subfields": [
+                    {"code": "a", "value": classification["lcc"]}
+                ]
+            })
+        
+        # 060: NLM Classification
+        if classification.get("nlm"):
+            fields.append({
+                "tag": "060",
+                "ind1": "0",
+                "ind2": "0",
+                "subfields": [
+                    {"code": "a", "value": classification["nlm"]}
+                ]
+            })
+        
+        # 650: Subject Headings
+        subjects = agents_output.get("subjects", [])
+        for subject in subjects:
+            marc_650 = subject.get("marc_650", {})
+            if marc_650:
+                fields.append({
+                    "tag": "650",
+                    "ind1": marc_650.get("ind1", " "),
+                    "ind2": marc_650.get("ind2", "0"),
+                    "subfields": marc_650.get("subfields", [])
+                })
+        
+        logger.info(f"Đã tạo {len(fields)} fields cho MARC21")
+        
+        return {
+            "leader": leader,
+            "fields": fields
+        }
+    
+    def _build_leader_from_type(self, leader_6_7: str) -> str:
+        """
+        Build MARC21 Leader từ leader_6_7
+        
+        Args:
+            leader_6_7: String 2 ký tự (vd: "am")
+            
+        Returns:
+            Leader string 24 ký tự
+        """
+        if len(leader_6_7) < 2:
+            leader_6_7 = "am"  # Default
+        
+        type_char = leader_6_7[0]  # Position 6
+        level_char = leader_6_7[1] if len(leader_6_7) > 1 else 'm'  # Position 7
+        
+        # Template: 00000n_ _m a2200000 i 4500
+        leader = f"00000n{type_char}{level_char} a2200000 i 4500"
+        
+        logger.debug(f"Built Leader: {leader} (từ {leader_6_7})")
+        return leader
     
     def _extract_all_agents(self, ocr_text: str) -> Dict[str, Any]:
         """
